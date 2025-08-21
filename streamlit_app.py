@@ -60,7 +60,6 @@ def extract_text_from_pdf(pdf_path):
     with open(pdf_path, "rb") as f:
         reader = PyPDF2.PdfReader(f)
         for page in reader.pages:
-            # PyPDF2 may return None if page is image-based
             page_text = page.extract_text()
             if page_text:
                 text += page_text + "\n"
@@ -142,48 +141,53 @@ with tabs[0]:
             dashboard_data["analyses"].append({"name": uploaded_file.name, "report": report})
             save_dashboard_data(dashboard_data)
 
-# 2. RegOS Chatbot Tab (COMPLETE, streaming, multi-turn, chat bubbles)
+# 2. RegOS Chatbot Tab (COMPLETE CHATBOT EXPERIENCE)
 with tabs[1]:
     st.header("RegOS Chatbot")
     st.write(
         "An advanced AI chatbot for regulatory, legal, and compliance queries. Your conversations are remembered for ongoing context."
     )
+    # Chat state: history of messages
     if "chat_history" not in st.session_state:
         st.session_state["chat_history"] = []
-    # Chat input and send logic
+
+    # Chat UI: show all messages as bubbles
+    for entry in st.session_state["chat_history"]:
+        if entry["role"] == "user":
+            st.markdown(
+                f"<div style='background-color:#222; color:#fff; border-radius:16px; padding:12px 18px; margin-top:10px; margin-bottom:2px; max-width:85%; align-self:flex-end; margin-left:auto;'><b>You:</b> {entry['content']}</div>",
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                f"<div style='background-color:#001F3F; color:#00bfff; border-radius:16px; padding:12px 18px; margin-top:2px; margin-bottom:10px; max-width:85%; align-self:flex-start; margin-right:auto;'><b>RegOS AI:</b> {entry['content']}</div>",
+                unsafe_allow_html=True,
+            )
+
+    # Input box and send button
     with st.form(key="chat_form", clear_on_submit=True):
         user_input = st.text_input("You:", key="chat_input", placeholder="Ask a regulatory, legal, or compliance question...")
         submitted = st.form_submit_button("Send")
     if submitted and user_input.strip():
+        # Add user message
         st.session_state["chat_history"].append({"role": "user", "content": user_input})
+        # Stream Gemini LLM response as chat
         with st.spinner("AI is typing..."):
             response_text = ""
             response_placeholder = st.empty()
             for chunk in gemini_chat(st.session_state["chat_history"]):
                 response_text += chunk
-                response_placeholder.markdown(f"<div style='color:#00bfff'><b>RegOS AI:</b> {response_text}</div>", unsafe_allow_html=True)
+                response_placeholder.markdown(
+                    f"<div style='background-color:#001F3F; color:#00bfff; border-radius:16px; padding:12px 18px; margin-top:2px; margin-bottom:10px; max-width:85%; align-self:flex-start; margin-right:auto;'><b>RegOS AI:</b> {response_text}</div>",
+                    unsafe_allow_html=True,
+                )
             st.session_state["chat_history"].append({"role": "model", "content": response_text})
         dashboard_data["chat_turns"] += 1
         dashboard_data["chatbot_usage"].append({"prompt": user_input, "response": response_text})
         save_dashboard_data(dashboard_data)
         st.experimental_rerun()
 
-    # Show chat history in styled bubbles
-    for entry in st.session_state["chat_history"]:
-        if entry["role"] == "user":
-            st.markdown(f"""
-                <div style='background-color:#262730; padding:10px 20px; border-radius:10px; margin-bottom:10px; color:#fff; width:fit-content;'>
-                    <b>You:</b> {entry['content']}
-                </div>
-            """, unsafe_allow_html=True)
-        else:
-            st.markdown(f"""
-                <div style='background-color:#001F3F; padding:10px 20px; border-radius:10px; margin-bottom:10px; color:#00bfff; width:fit-content;'>
-                    <b>RegOS AI:</b> {entry['content']}
-                </div>
-            """, unsafe_allow_html=True)
-
-    # Clear chat
+    # "Clear Chat" button below chat
     if st.button("Clear Chat", key="clear_chat"):
         st.session_state["chat_history"] = []
         st.experimental_rerun()
