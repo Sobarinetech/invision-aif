@@ -60,7 +60,10 @@ def extract_text_from_pdf(pdf_path):
     with open(pdf_path, "rb") as f:
         reader = PyPDF2.PdfReader(f)
         for page in reader.pages:
-            text += page.extract_text() or ""
+            # PyPDF2 may return None if page is image-based
+            page_text = page.extract_text()
+            if page_text:
+                text += page_text + "\n"
     return text.strip()
 
 def extract_text_from_docx(docx_path):
@@ -78,15 +81,17 @@ def extract_text(uploadedfile):
         tmp_file.write(uploadedfile.getbuffer())
         tmp_file.flush()
         file_path = tmp_file.name
-    if suffix == "pdf":
-        text = extract_text_from_pdf(file_path)
-    elif suffix == "docx":
-        text = extract_text_from_docx(file_path)
-    elif suffix == "txt":
-        text = extract_text_from_txt(file_path)
-    else:
-        text = ""
-    os.unlink(file_path)
+    try:
+        if suffix == "pdf":
+            text = extract_text_from_pdf(file_path)
+        elif suffix == "docx":
+            text = extract_text_from_docx(file_path)
+        elif suffix == "txt":
+            text = extract_text_from_txt(file_path)
+        else:
+            text = ""
+    finally:
+        os.unlink(file_path)
     return text
 
 # ---------- LOCAL "DB" HELPER ----------
@@ -137,7 +142,7 @@ with tabs[0]:
             dashboard_data["analyses"].append({"name": uploaded_file.name, "report": report})
             save_dashboard_data(dashboard_data)
 
-# 2. RegOS Chatbot Tab
+# 2. RegOS Chatbot Tab (COMPLETE, streaming, multi-turn, chat bubbles)
 with tabs[1]:
     st.header("RegOS Chatbot")
     st.write(
@@ -145,26 +150,86 @@ with tabs[1]:
     )
     if "chat_history" not in st.session_state:
         st.session_state["chat_history"] = []
-    user_input = st.text_input("You:", key="chat_input")
-    send_btn = st.button("Send", key="send_btn")
-    if send_btn and user_input.strip():
+    # Chat input and send logic
+    with st.form(key="chat_form", clear_on_submit=True):
+        user_input = st.text_input("You:", key="chat_input", placeholder="Ask a regulatory, legal, or compliance question...")
+        submitted = st.form_submit_button("Send")
+    if submitted and user_input.strip():
         st.session_state["chat_history"].append({"role": "user", "content": user_input})
-        with st.spinner("AI thinking..."):
-            bot_response = gemini_generate(user_input)
-        st.session_state["chat_history"].append({"role": "model", "content": bot_response})
+        with st.spinner("AI is typing..."):
+            response_text = ""
+            response_placeholder = st.empty()
+            for chunk in gemini_chat(st.session_state["chat_history"]):
+                response_text += chunk
+                response_placeholder.markdown(f"<div style='color:#00bfff'><b>RegOS AI:</b> {response_text}</div>", unsafe_allow_html=True)
+            st.session_state["chat_history"].append({"role": "model", "content": response_text})
         dashboard_data["chat_turns"] += 1
-        dashboard_data["chatbot_usage"].append({"prompt": user_input, "response": bot_response})
+        dashboard_data["chatbot_usage"].append({"prompt": user_input, "response": response_text})
         save_dashboard_data(dashboard_data)
+        st.experimental_rerun()
 
-    # Show chat history
+    # Show chat history in styled bubbles
     for entry in st.session_state["chat_history"]:
         if entry["role"] == "user":
-            st.markdown(f"**You:** {entry['content']}")
+            st.markdown(f"""
+                <div style='background-color:#262730; padding:10px 20px; border-radius:10px; margin-bottom:10px; color:#fff; width:fit-content;'>
+                    <b>You:</b> {entry['content']}
+                </div>
+            """, unsafe_allow_html=True)
         else:
-            st.markdown(f"**RegOS AI:** {entry['content']}")
+            st.markdown(f"""
+                <div style='background-color:#001F3F; padding:10px 20px; border-radius:10px; margin-bottom:10px; color:#00bfff; width:fit-content;'>
+                    <b>RegOS AI:</b> {entry['content']}
+                </div>
+            """, unsafe_allow_html=True)
 
+    # Clear chat
     if st.button("Clear Chat", key="clear_chat"):
         st.session_state["chat_history"] = []
+        st.experimental_rerun()
+
+# Gemini chat function (streaming, multi-turn, full LLM memory)
+def gemini_chat(history):
+    client = get_gemini_client()
+    model = "gemini-2.5-flash"
+    contents = []
+    for entry in history:
+        contents.append(
+            types.Content(
+                role="user" if entry["role"] == "user" else "model",
+                parts=[types.Part.from_text(text=entry["content"])]
+            )
+        )
+    tools = [
+        types.Tool(code_execution=types.ToolCodeExecution),
+        types.Tool(googleSearch=types.GoogleSearch()),
+    ]
+    generate_content_config = types.GenerateContentConfig(
+        thinking_config=types.ThinkingConfig(thinking_budget=-1),
+        tools=tools,
+    )
+    output = ""
+    for chunk in client.models.generate_content_stream(
+        model=model,
+        contents=contents,
+        config=generate_content_config,
+    ):
+        if (
+            chunk.candidates is None
+            or chunk.candidates[0].content is None
+            or chunk.candidates[0].content.parts is None
+        ):
+            continue
+        part = chunk.candidates[0].content.parts[0]
+        if part.text:
+            output += part.text
+            yield part.text
+        if part.executable_code:
+            output += f"\n[Executable Code]\n{part.executable_code}\n"
+            yield f"\n[Executable Code]\n{part.executable_code}\n"
+        if part.code_execution_result:
+            output += f"\n[Code Output]\n{part.code_execution_result}\n"
+            yield f"\n[Code Output]\n{part.code_execution_result}\n"
 
 # 3. Dashboard Tab
 with tabs[2]:
