@@ -36,27 +36,19 @@ def gemini_chat(history):
         thinking_config=types.ThinkingConfig(thinking_budget=-1),
         tools=tools,
     )
-    output = ""
     for chunk in client.models.generate_content_stream(
         model=model,
         contents=contents,
         config=generate_content_config,
     ):
-        if (
-            chunk.candidates is None
-            or chunk.candidates[0].content is None
-            or chunk.candidates[0].content.parts is None
-        ):
+        if not chunk.candidates or not chunk.candidates[0].content or not chunk.candidates[0].content.parts:
             continue
         part = chunk.candidates[0].content.parts[0]
         if part.text:
-            output += part.text
             yield part.text
         if part.executable_code:
-            output += f"\n[Executable Code]\n{part.executable_code}\n"
             yield f"\n[Executable Code]\n{part.executable_code}\n"
         if part.code_execution_result:
-            output += f"\n[Code Output]\n{part.code_execution_result}\n"
             yield f"\n[Code Output]\n{part.code_execution_result}\n"
 
 def gemini_generate(input_text):
@@ -83,11 +75,7 @@ def gemini_generate(input_text):
         contents=contents,
         config=generate_content_config,
     ):
-        if (
-            chunk.candidates is None
-            or chunk.candidates[0].content is None
-            or chunk.candidates[0].content.parts is None
-        ):
+        if not chunk.candidates or not chunk.candidates[0].content or not chunk.candidates[0].content.parts:
             continue
         part = chunk.candidates[0].content.parts[0]
         if part.text:
@@ -141,9 +129,9 @@ def extract_text(uploadedfile):
 def get_dashboard_data():
     if "dashboard_data" not in st.session_state:
         st.session_state["dashboard_data"] = {
-            "analyses": [],    # list of {"name", "report"}
-            "chat_turns": 0,   # int
-            "chatbot_usage": [], # list of {"prompt", "response"}
+            "analyses": [],
+            "chat_turns": 0,
+            "chatbot_usage": [],
         }
     return st.session_state["dashboard_data"]
 
@@ -176,7 +164,7 @@ with tabs[0]:
                 "Return your analysis in the following structure:\n\n"
                 "1. **Summary of Document**\n2. **Key Compliance Risks**\n3. **Detected Regulatory Breaches**\n"
                 "4. **Recommendations**\n5. **Any Other Notable Observations**\n\n"
-                f"---\n\nDOCUMENT TEXT:\n{extracted_text[:8000]}\n"  # limit to 8000 chars for prompt safety
+                f"---\n\nDOCUMENT TEXT:\n{extracted_text[:8000]}\n"
             )
             with st.spinner(f"AI analyzing {uploaded_file.name}..."):
                 report = gemini_generate(input_text)
@@ -185,16 +173,15 @@ with tabs[0]:
             dashboard_data["analyses"].append({"name": uploaded_file.name, "report": report})
             save_dashboard_data(dashboard_data)
 
-# 2. RegOS Chatbot Tab (COMPLETE CHATBOT EXPERIENCE)
+# 2. RegOS Chatbot Tab (COMPLETE, MODERN, ERROR FREE)
 with tabs[1]:
     st.header("RegOS Chatbot")
     st.write(
         "An advanced AI chatbot for regulatory, legal, and compliance queries. Your conversations are remembered for ongoing context."
     )
-    # Chat state: history of messages
+
     if "chat_history" not in st.session_state:
         st.session_state["chat_history"] = []
-
     # Chat UI: show all messages as bubbles
     for entry in st.session_state["chat_history"]:
         if entry["role"] == "user":
@@ -204,7 +191,7 @@ with tabs[1]:
             )
         else:
             st.markdown(
-                f"<div style='background-color:#001F3F; color:#00bfff; border-radius:16px; padding:12px 18px; margin-top:2px; margin-bottom:10px; max-width:85%; align-self:flex-start; margin-right:auto;'><b>RegOS AI:</b> {entry['content']}</div>",
+                f"<div style='background-color:#013a63; color:#8fd6ff; border-radius:16px; padding:12px 18px; margin-top:2px; margin-bottom:10px; max-width:85%; align-self:flex-start; margin-right:auto;'><b>RegOS AI:</b> {entry['content']}</div>",
                 unsafe_allow_html=True,
             )
 
@@ -212,29 +199,31 @@ with tabs[1]:
     with st.form(key="chat_form", clear_on_submit=True):
         user_input = st.text_input("You:", key="chat_input", placeholder="Ask a regulatory, legal, or compliance question...")
         submitted = st.form_submit_button("Send")
+
     if submitted and user_input.strip():
-        # Add user message
         st.session_state["chat_history"].append({"role": "user", "content": user_input})
-        # Stream Gemini LLM response as chat
         with st.spinner("AI is typing..."):
             response_text = ""
             response_placeholder = st.empty()
-            for chunk in gemini_chat(st.session_state["chat_history"]):
-                response_text += chunk
-                response_placeholder.markdown(
-                    f"<div style='background-color:#001F3F; color:#00bfff; border-radius:16px; padding:12px 18px; margin-top:2px; margin-bottom:10px; max-width:85%; align-self:flex-start; margin-right:auto;'><b>RegOS AI:</b> {response_text}</div>",
-                    unsafe_allow_html=True,
-                )
+            try:
+                for chunk in gemini_chat(st.session_state["chat_history"]):
+                    response_text += chunk
+                    response_placeholder.markdown(
+                        f"<div style='background-color:#013a63; color:#8fd6ff; border-radius:16px; padding:12px 18px; margin-top:2px; margin-bottom:10px; max-width:85%; align-self:flex-start; margin-right:auto;'><b>RegOS AI:</b> {response_text}</div>",
+                        unsafe_allow_html=True,
+                    )
+            except Exception as e:
+                response_text = f"Sorry, there was an error with the AI: {e}"
+                response_placeholder.markdown(response_text)
             st.session_state["chat_history"].append({"role": "model", "content": response_text})
         dashboard_data["chat_turns"] += 1
         dashboard_data["chatbot_usage"].append({"prompt": user_input, "response": response_text})
         save_dashboard_data(dashboard_data)
-        st.experimental_rerun()
+        st.rerun()  # MODERN RERUN
 
-    # "Clear Chat" button below chat
     if st.button("Clear Chat", key="clear_chat"):
         st.session_state["chat_history"] = []
-        st.experimental_rerun()
+        st.rerun()
 
 # 3. Dashboard Tab
 with tabs[2]:
