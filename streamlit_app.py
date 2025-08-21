@@ -16,7 +16,51 @@ GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", os.environ.get("GEMINI_API_KEY
 def get_gemini_client():
     return genai.Client(api_key=GEMINI_API_KEY)
 
+# Gemini chat function (streaming, multi-turn, full LLM memory)
+def gemini_chat(history):
+    client = get_gemini_client()
+    model = "gemini-2.5-flash"
+    contents = []
+    for entry in history:
+        contents.append(
+            types.Content(
+                role="user" if entry["role"] == "user" else "model",
+                parts=[types.Part.from_text(text=entry["content"])]
+            )
+        )
+    tools = [
+        types.Tool(code_execution=types.ToolCodeExecution),
+        types.Tool(googleSearch=types.GoogleSearch()),
+    ]
+    generate_content_config = types.GenerateContentConfig(
+        thinking_config=types.ThinkingConfig(thinking_budget=-1),
+        tools=tools,
+    )
+    output = ""
+    for chunk in client.models.generate_content_stream(
+        model=model,
+        contents=contents,
+        config=generate_content_config,
+    ):
+        if (
+            chunk.candidates is None
+            or chunk.candidates[0].content is None
+            or chunk.candidates[0].content.parts is None
+        ):
+            continue
+        part = chunk.candidates[0].content.parts[0]
+        if part.text:
+            output += part.text
+            yield part.text
+        if part.executable_code:
+            output += f"\n[Executable Code]\n{part.executable_code}\n"
+            yield f"\n[Executable Code]\n{part.executable_code}\n"
+        if part.code_execution_result:
+            output += f"\n[Code Output]\n{part.code_execution_result}\n"
+            yield f"\n[Code Output]\n{part.code_execution_result}\n"
+
 def gemini_generate(input_text):
+    # For non-chat, single-turn usage
     client = get_gemini_client()
     model = "gemini-2.5-flash"
     contents = [
@@ -191,49 +235,6 @@ with tabs[1]:
     if st.button("Clear Chat", key="clear_chat"):
         st.session_state["chat_history"] = []
         st.experimental_rerun()
-
-# Gemini chat function (streaming, multi-turn, full LLM memory)
-def gemini_chat(history):
-    client = get_gemini_client()
-    model = "gemini-2.5-flash"
-    contents = []
-    for entry in history:
-        contents.append(
-            types.Content(
-                role="user" if entry["role"] == "user" else "model",
-                parts=[types.Part.from_text(text=entry["content"])]
-            )
-        )
-    tools = [
-        types.Tool(code_execution=types.ToolCodeExecution),
-        types.Tool(googleSearch=types.GoogleSearch()),
-    ]
-    generate_content_config = types.GenerateContentConfig(
-        thinking_config=types.ThinkingConfig(thinking_budget=-1),
-        tools=tools,
-    )
-    output = ""
-    for chunk in client.models.generate_content_stream(
-        model=model,
-        contents=contents,
-        config=generate_content_config,
-    ):
-        if (
-            chunk.candidates is None
-            or chunk.candidates[0].content is None
-            or chunk.candidates[0].content.parts is None
-        ):
-            continue
-        part = chunk.candidates[0].content.parts[0]
-        if part.text:
-            output += part.text
-            yield part.text
-        if part.executable_code:
-            output += f"\n[Executable Code]\n{part.executable_code}\n"
-            yield f"\n[Executable Code]\n{part.executable_code}\n"
-        if part.code_execution_result:
-            output += f"\n[Code Output]\n{part.code_execution_result}\n"
-            yield f"\n[Code Output]\n{part.code_execution_result}\n"
 
 # 3. Dashboard Tab
 with tabs[2]:
