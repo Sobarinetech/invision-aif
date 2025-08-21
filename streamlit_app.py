@@ -3,15 +3,15 @@ import streamlit as st
 from google import genai
 from google.genai import types
 import tempfile
-import base64
-import pickle
+import PyPDF2
+import docx
 
 # ---------- CONFIG ----------
 st.set_page_config(page_title="Invision AIF Solutions", layout="wide")
 st.title("Invision AIF Solutions")
 
 # ---------- ENVIRONMENT: GOOGLE GEMINI ----------
-GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"] if "GEMINI_API_KEY" in st.secrets else os.environ.get("GEMINI_API_KEY")
+GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", os.environ.get("GEMINI_API_KEY"))
 
 def get_gemini_client():
     return genai.Client(api_key=GEMINI_API_KEY)
@@ -22,9 +22,7 @@ def gemini_generate(input_text):
     contents = [
         types.Content(
             role="user",
-            parts=[
-                types.Part.from_text(text=input_text),
-            ],
+            parts=[types.Part.from_text(text=input_text)],
         ),
     ]
     tools = [
@@ -56,45 +54,40 @@ def gemini_generate(input_text):
             output += f"\n[Code Output]\n{part.code_execution_result}\n"
     return output
 
-def gemini_chat(history):
-    client = get_gemini_client()
-    model = "gemini-2.5-flash"
-    contents = []
-    for entry in history:
-        contents.append(
-            types.Content(
-                role="user" if entry["role"] == "user" else "model",
-                parts=[types.Part.from_text(text=entry["content"])]
-            )
-        )
-    tools = [
-        types.Tool(code_execution=types.ToolCodeExecution),
-        types.Tool(googleSearch=types.GoogleSearch()),
-    ]
-    generate_content_config = types.GenerateContentConfig(
-        thinking_config=types.ThinkingConfig(thinking_budget=-1),
-        tools=tools,
-    )
-    output = ""
-    for chunk in client.models.generate_content_stream(
-        model=model,
-        contents=contents,
-        config=generate_content_config,
-    ):
-        if (
-            chunk.candidates is None
-            or chunk.candidates[0].content is None
-            or chunk.candidates[0].content.parts is None
-        ):
-            continue
-        part = chunk.candidates[0].content.parts[0]
-        if part.text:
-            output += part.text
-        if part.executable_code:
-            output += f"\n[Executable Code]\n{part.executable_code}\n"
-        if part.code_execution_result:
-            output += f"\n[Code Output]\n{part.code_execution_result}\n"
-    return output
+# ---------- FILE TEXT EXTRACTION ----------
+def extract_text_from_pdf(pdf_path):
+    text = ""
+    with open(pdf_path, "rb") as f:
+        reader = PyPDF2.PdfReader(f)
+        for page in reader.pages:
+            text += page.extract_text() or ""
+    return text.strip()
+
+def extract_text_from_docx(docx_path):
+    doc = docx.Document(docx_path)
+    text = "\n".join([para.text for para in doc.paragraphs])
+    return text.strip()
+
+def extract_text_from_txt(txt_path):
+    with open(txt_path, "r", encoding="utf-8", errors="ignore") as f:
+        return f.read().strip()
+
+def extract_text(uploadedfile):
+    suffix = uploadedfile.name.lower().split(".")[-1]
+    with tempfile.NamedTemporaryFile(delete=False, suffix=f".{suffix}") as tmp_file:
+        tmp_file.write(uploadedfile.getbuffer())
+        tmp_file.flush()
+        file_path = tmp_file.name
+    if suffix == "pdf":
+        text = extract_text_from_pdf(file_path)
+    elif suffix == "docx":
+        text = extract_text_from_docx(file_path)
+    elif suffix == "txt":
+        text = extract_text_from_txt(file_path)
+    else:
+        text = ""
+    os.unlink(file_path)
+    return text
 
 # ---------- LOCAL "DB" HELPER ----------
 def get_dashboard_data():
@@ -108,16 +101,6 @@ def get_dashboard_data():
 
 def save_dashboard_data(data):
     st.session_state["dashboard_data"] = data
-
-# ---------- FILE HANDLING ----------
-def save_uploaded_file(uploadedfile):
-    with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
-        tmp_file.write(uploadedfile.getbuffer())
-        return tmp_file.name
-
-def encode_file_to_base64(filepath):
-    with open(filepath, "rb") as f:
-        return base64.b64encode(f.read()).decode()
 
 # ---------- TABS ----------
 tabs = st.tabs(["Compliance Analysis", "RegOS Chatbot", "Dashboard"])
@@ -134,17 +117,23 @@ with tabs[0]:
     )
     if uploaded_files:
         for uploaded_file in uploaded_files:
-            st.write(f"Analysing: {uploaded_file.name}")
-            file_path = save_uploaded_file(uploaded_file)
-            file_b64 = encode_file_to_base64(file_path)
+            st.write(f"Analyzing: {uploaded_file.name}")
+            extracted_text = extract_text(uploaded_file)
+            if not extracted_text or extracted_text.strip() == "":
+                st.error("No text extracted; file may be scanned or image-based. Please upload a text-based document.")
+                continue
             input_text = (
-                f"You are a world-class compliance analyst. Analyze the following document for AIF (Alternative Investment Fund) compliance, risks, regulatory breaches, and summarize key findings. Document (base64): {file_b64}. "
-                "If the file is not text, extract and analyze its content first."
+                "You are a world-class compliance analyst. Analyze the following AIF (Alternative Investment Fund) document for compliance, "
+                "risks, regulatory breaches, and summarize key findings. "
+                "Return your analysis in the following structure:\n\n"
+                "1. **Summary of Document**\n2. **Key Compliance Risks**\n3. **Detected Regulatory Breaches**\n"
+                "4. **Recommendations**\n5. **Any Other Notable Observations**\n\n"
+                f"---\n\nDOCUMENT TEXT:\n{extracted_text[:8000]}\n"  # limit to 8000 chars for prompt safety
             )
-            with st.spinner(f"AI analysing {uploaded_file.name}..."):
+            with st.spinner(f"AI analyzing {uploaded_file.name}..."):
                 report = gemini_generate(input_text)
             st.subheader(f"AI Compliance Report for {uploaded_file.name}")
-            st.write(report)
+            st.markdown(report)
             dashboard_data["analyses"].append({"name": uploaded_file.name, "report": report})
             save_dashboard_data(dashboard_data)
 
@@ -161,7 +150,7 @@ with tabs[1]:
     if send_btn and user_input.strip():
         st.session_state["chat_history"].append({"role": "user", "content": user_input})
         with st.spinner("AI thinking..."):
-            bot_response = gemini_chat(st.session_state["chat_history"])
+            bot_response = gemini_generate(user_input)
         st.session_state["chat_history"].append({"role": "model", "content": bot_response})
         dashboard_data["chat_turns"] += 1
         dashboard_data["chatbot_usage"].append({"prompt": user_input, "response": bot_response})
@@ -199,3 +188,6 @@ with tabs[2]:
 
 st.markdown("---")
 st.caption("Powered by Google Gemini & Streamlit. Confidential & Secure.")
+
+# ---------- REQUIREMENTS ----------
+# pip install streamlit google-genai PyPDF2 python-docx
