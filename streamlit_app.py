@@ -16,18 +16,36 @@ GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", os.environ.get("GEMINI_API_KEY
 def get_gemini_client():
     return genai.Client(api_key=GEMINI_API_KEY)
 
-# Gemini chat function (streaming, multi-turn, full LLM memory)
-def gemini_chat(history):
+def gemini_chat(history, files=None):
+    """
+    history: List of dicts: [{"role": "user"/"model", "content": "..."}]
+    files: List of tuples: [(file_name, file_bytes)]
+    """
     client = get_gemini_client()
     model = "gemini-2.5-flash"
+    # Build contents with history
     contents = []
     for entry in history:
-        contents.append(
-            types.Content(
-                role="user" if entry["role"] == "user" else "model",
-                parts=[types.Part.from_text(text=entry["content"])]
-            )
-        )
+        parts = [types.Part.from_text(text=entry["content"])]
+        contents.append(types.Content(role="user" if entry["role"] == "user" else "model", parts=parts))
+
+    # Add file to latest user message
+    if files:
+        # Gemini expects files as types.Part.from_data
+        latest_content = contents[-1]
+        for file_name, file_bytes in files:
+            # Guess mime-type
+            ext = file_name.lower().split(".")[-1]
+            if ext == "pdf":
+                mime = "application/pdf"
+            elif ext == "docx":
+                mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            elif ext == "txt":
+                mime = "text/plain"
+            else:
+                mime = "application/octet-stream"
+            latest_content.parts.append(types.Part.from_data(mime_type=mime, data=file_bytes, file_name=file_name))
+
     tools = [
         types.Tool(code_execution=types.ToolCodeExecution),
         types.Tool(googleSearch=types.GoogleSearch()),
@@ -51,8 +69,8 @@ def gemini_chat(history):
         if part.code_execution_result:
             yield f"\n[Code Output]\n{part.code_execution_result}\n"
 
-def gemini_generate(input_text):
-    # For non-chat, single-turn usage
+def gemini_generate(input_text, files=None):
+    # For non-chat, single-turn usage with optional files
     client = get_gemini_client()
     model = "gemini-2.5-flash"
     contents = [
@@ -61,6 +79,19 @@ def gemini_generate(input_text):
             parts=[types.Part.from_text(text=input_text)],
         ),
     ]
+    if files:
+        for file_name, file_bytes in files:
+            ext = file_name.lower().split(".")[-1]
+            if ext == "pdf":
+                mime = "application/pdf"
+            elif ext == "docx":
+                mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            elif ext == "txt":
+                mime = "text/plain"
+            else:
+                mime = "application/octet-stream"
+            contents[0].parts.append(types.Part.from_data(mime_type=mime, data=file_bytes, file_name=file_name))
+
     tools = [
         types.Tool(code_execution=types.ToolCodeExecution),
         types.Tool(googleSearch=types.GoogleSearch()),
@@ -145,44 +176,47 @@ dashboard_data = get_dashboard_data()
 # 1. Compliance Analysis Tab
 with tabs[0]:
     st.header("Compliance Analysis of AIF Documents")
-    st.write("Upload your AIF-related documents for compliance analysis powered by AI.")
+    st.write("Upload your AIF-related documents for direct AI analysis. The AI will read and analyze the file itself.")
     uploaded_files = st.file_uploader(
         "Upload document(s) (PDF, DOCX, TXT)",
         type=["pdf", "docx", "txt"],
         accept_multiple_files=True,
     )
     if uploaded_files:
-        for uploaded_file in uploaded_files:
-            st.write(f"Analyzing: {uploaded_file.name}")
-            extracted_text = extract_text(uploaded_file)
-            if not extracted_text or extracted_text.strip() == "":
-                st.error("No text extracted; file may be scanned or image-based. Please upload a text-based document.")
-                continue
-            input_text = (
-                "You are a world-class compliance analyst. Analyze the following AIF (Alternative Investment Fund) document for compliance, "
-                "risks, regulatory breaches, and summarize key findings. "
-                "Return your analysis in the following structure:\n\n"
-                "1. **Summary of Document**\n2. **Key Compliance Risks**\n3. **Detected Regulatory Breaches**\n"
-                "4. **Recommendations**\n5. **Any Other Notable Observations**\n\n"
-                f"---\n\nDOCUMENT TEXT:\n{extracted_text[:8000]}\n"
-            )
-            with st.spinner(f"AI analyzing {uploaded_file.name}..."):
-                report = gemini_generate(input_text)
-            st.subheader(f"AI Compliance Report for {uploaded_file.name}")
-            st.markdown(report)
-            dashboard_data["analyses"].append({"name": uploaded_file.name, "report": report})
-            save_dashboard_data(dashboard_data)
+        files_data = [(f.name, f.read()) for f in uploaded_files]
+        prompt = (
+            "You are a world-class compliance analyst. Analyze the uploaded AIF (Alternative Investment Fund) documents for compliance, risks, regulatory breaches, and summarize key findings. "
+            "Return your analysis in the following structure:\n\n"
+            "1. **Summary of Document(s)**\n2. **Key Compliance Risks**\n3. **Detected Regulatory Breaches**\n"
+            "4. **Recommendations**\n5. **Any Other Notable Observations**\n\n"
+            "If more than one document is uploaded, compare and contrast where relevant."
+        )
+        with st.spinner("AI analyzing uploaded document(s)..."):
+            report = gemini_generate(prompt, files=files_data)
+        st.subheader("AI Compliance Report")
+        st.markdown(report)
+        dashboard_data["analyses"].append({"name": ", ".join(f[0] for f in files_data), "report": report})
+        save_dashboard_data(dashboard_data)
 
-# 2. RegOS Chatbot Tab (COMPLETE, MODERN, ERROR FREE)
+# 2. RegOS Chatbot Tab (LLM with document upload)
 with tabs[1]:
     st.header("RegOS Chatbot")
     st.write(
-        "An advanced AI chatbot for regulatory, legal, and compliance queries. Your conversations are remembered for ongoing context."
+        "An advanced AI chatbot for regulatory, legal, and compliance queries. You can also upload documents for the AI to analyze and reference in your chat."
     )
-
     if "chat_history" not in st.session_state:
         st.session_state["chat_history"] = []
-    # Chat UI: show all messages as bubbles
+
+    # Document upload for chat
+    chat_uploaded_files = st.file_uploader(
+        "Upload documents for this chat (optional, PDF, DOCX, TXT)",
+        type=["pdf", "docx", "txt"],
+        accept_multiple_files=True,
+        key="chat_files"
+    )
+    chat_files_data = [(f.name, f.read()) for f in chat_uploaded_files] if chat_uploaded_files else []
+
+    # Show chat history as bubbles
     for entry in st.session_state["chat_history"]:
         if entry["role"] == "user":
             st.markdown(
@@ -195,9 +229,8 @@ with tabs[1]:
                 unsafe_allow_html=True,
             )
 
-    # Input box and send button
     with st.form(key="chat_form", clear_on_submit=True):
-        user_input = st.text_input("You:", key="chat_input", placeholder="Ask a regulatory, legal, or compliance question...")
+        user_input = st.text_input("You:", key="chat_input", placeholder="Ask a regulatory, legal, or compliance question or request document analysis...")
         submitted = st.form_submit_button("Send")
 
     if submitted and user_input.strip():
@@ -206,7 +239,7 @@ with tabs[1]:
             response_text = ""
             response_placeholder = st.empty()
             try:
-                for chunk in gemini_chat(st.session_state["chat_history"]):
+                for chunk in gemini_chat(st.session_state["chat_history"], files=chat_files_data):
                     response_text += chunk
                     response_placeholder.markdown(
                         f"<div style='background-color:#013a63; color:#8fd6ff; border-radius:16px; padding:12px 18px; margin-top:2px; margin-bottom:10px; max-width:85%; align-self:flex-start; margin-right:auto;'><b>RegOS AI:</b> {response_text}</div>",
@@ -219,7 +252,7 @@ with tabs[1]:
         dashboard_data["chat_turns"] += 1
         dashboard_data["chatbot_usage"].append({"prompt": user_input, "response": response_text})
         save_dashboard_data(dashboard_data)
-        st.rerun()  # MODERN RERUN
+        st.rerun()
 
     if st.button("Clear Chat", key="clear_chat"):
         st.session_state["chat_history"] = []
