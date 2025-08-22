@@ -16,35 +16,26 @@ GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", os.environ.get("GEMINI_API_KEY
 def get_gemini_client():
     return genai.Client(api_key=GEMINI_API_KEY)
 
-def gemini_chat(history, files=None):
+def gemini_chat(history, doc_text=None):
     """
     history: List of dicts: [{"role": "user"/"model", "content": "..."}]
-    files: List of tuples: [(file_name, file_bytes)]
+    doc_text: str, document text to inject into prompt
     """
     client = get_gemini_client()
     model = "gemini-2.5-flash"
-    # Build contents with history
     contents = []
-    for entry in history:
-        parts = [types.Part.from_text(text=entry["content"])]
+    # Inject document text (if any) into the latest user message
+    for idx, entry in enumerate(history):
+        content = entry["content"]
+        # Only add doc_text to the latest user message
+        if doc_text and idx == len(history) - 1 and entry["role"] == "user":
+            content += (
+                f"\n\n---\n\n"
+                f"Attached document text (for your analysis, reference, or to answer questions):\n"
+                f"{doc_text[:8000]}\n"
+            )
+        parts = [types.Part.from_text(text=content)]
         contents.append(types.Content(role="user" if entry["role"] == "user" else "model", parts=parts))
-
-    # Add file to latest user message
-    if files:
-        # Gemini expects files as types.Part.from_data
-        latest_content = contents[-1]
-        for file_name, file_bytes in files:
-            # Guess mime-type
-            ext = file_name.lower().split(".")[-1]
-            if ext == "pdf":
-                mime = "application/pdf"
-            elif ext == "docx":
-                mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            elif ext == "txt":
-                mime = "text/plain"
-            else:
-                mime = "application/octet-stream"
-            latest_content.parts.append(types.Part.from_data(mime_type=mime, data=file_bytes, file_name=file_name))
 
     tools = [
         types.Tool(code_execution=types.ToolCodeExecution),
@@ -69,8 +60,7 @@ def gemini_chat(history, files=None):
         if part.code_execution_result:
             yield f"\n[Code Output]\n{part.code_execution_result}\n"
 
-def gemini_generate(input_text, files=None):
-    # For non-chat, single-turn usage with optional files
+def gemini_generate(input_text):
     client = get_gemini_client()
     model = "gemini-2.5-flash"
     contents = [
@@ -79,19 +69,6 @@ def gemini_generate(input_text, files=None):
             parts=[types.Part.from_text(text=input_text)],
         ),
     ]
-    if files:
-        for file_name, file_bytes in files:
-            ext = file_name.lower().split(".")[-1]
-            if ext == "pdf":
-                mime = "application/pdf"
-            elif ext == "docx":
-                mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            elif ext == "txt":
-                mime = "text/plain"
-            else:
-                mime = "application/octet-stream"
-            contents[0].parts.append(types.Part.from_data(mime_type=mime, data=file_bytes, file_name=file_name))
-
     tools = [
         types.Tool(code_execution=types.ToolCodeExecution),
         types.Tool(googleSearch=types.GoogleSearch()),
@@ -118,43 +95,60 @@ def gemini_generate(input_text, files=None):
     return output
 
 # ---------- FILE TEXT EXTRACTION ----------
-def extract_text_from_pdf(pdf_path):
+def extract_text_from_pdf(pdf_file):
     text = ""
-    with open(pdf_path, "rb") as f:
-        reader = PyPDF2.PdfReader(f)
-        for page in reader.pages:
-            page_text = page.extract_text()
-            if page_text:
-                text += page_text + "\n"
-    return text.strip()
-
-def extract_text_from_docx(docx_path):
-    doc = docx.Document(docx_path)
-    text = "\n".join([para.text for para in doc.paragraphs])
-    return text.strip()
-
-def extract_text_from_txt(txt_path):
-    with open(txt_path, "r", encoding="utf-8", errors="ignore") as f:
-        return f.read().strip()
-
-def extract_text(uploadedfile):
-    suffix = uploadedfile.name.lower().split(".")[-1]
-    with tempfile.NamedTemporaryFile(delete=False, suffix=f".{suffix}") as tmp_file:
-        tmp_file.write(uploadedfile.getbuffer())
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+        tmp_file.write(pdf_file.read())
         tmp_file.flush()
         file_path = tmp_file.name
     try:
-        if suffix == "pdf":
-            text = extract_text_from_pdf(file_path)
-        elif suffix == "docx":
-            text = extract_text_from_docx(file_path)
-        elif suffix == "txt":
-            text = extract_text_from_txt(file_path)
-        else:
-            text = ""
+        with open(file_path, "rb") as f:
+            reader = PyPDF2.PdfReader(f)
+            for page in reader.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text += page_text + "\n"
     finally:
         os.unlink(file_path)
-    return text
+    return text.strip()
+
+def extract_text_from_docx(docx_file):
+    text = ""
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as tmp_file:
+        tmp_file.write(docx_file.read())
+        tmp_file.flush()
+        file_path = tmp_file.name
+    try:
+        doc = docx.Document(file_path)
+        text = "\n".join([para.text for para in doc.paragraphs])
+    finally:
+        os.unlink(file_path)
+    return text.strip()
+
+def extract_text_from_txt(txt_file):
+    txt_file.seek(0)
+    return txt_file.read().decode(errors="ignore").strip()
+
+def extract_uploaded_files_text(uploaded_files):
+    """Returns a summary string if multiple files, or all text if one file"""
+    if not uploaded_files:
+        return None
+    all_texts = []
+    for file in uploaded_files:
+        ext = file.name.lower().split(".")[-1]
+        if ext == "pdf":
+            text = extract_text_from_pdf(file)
+        elif ext == "docx":
+            text = extract_text_from_docx(file)
+        elif ext == "txt":
+            text = extract_text_from_txt(file)
+        else:
+            text = ""
+        if text:
+            all_texts.append(f"---\nFile: {file.name}\n{text[:8000]}")
+    if not all_texts:
+        return None
+    return "\n\n".join(all_texts)
 
 # ---------- LOCAL "DB" HELPER ----------
 def get_dashboard_data():
@@ -181,22 +175,26 @@ with tabs[0]:
         "Upload document(s) (PDF, DOCX, TXT)",
         type=["pdf", "docx", "txt"],
         accept_multiple_files=True,
+        key="compliance_files"
     )
     if uploaded_files:
-        files_data = [(f.name, f.read()) for f in uploaded_files]
-        prompt = (
-            "You are a world-class compliance analyst. Analyze the uploaded AIF (Alternative Investment Fund) documents for compliance, risks, regulatory breaches, and summarize key findings. "
-            "Return your analysis in the following structure:\n\n"
-            "1. **Summary of Document(s)**\n2. **Key Compliance Risks**\n3. **Detected Regulatory Breaches**\n"
-            "4. **Recommendations**\n5. **Any Other Notable Observations**\n\n"
-            "If more than one document is uploaded, compare and contrast where relevant."
-        )
-        with st.spinner("AI analyzing uploaded document(s)..."):
-            report = gemini_generate(prompt, files=files_data)
-        st.subheader("AI Compliance Report")
-        st.markdown(report)
-        dashboard_data["analyses"].append({"name": ", ".join(f[0] for f in files_data), "report": report})
-        save_dashboard_data(dashboard_data)
+        doc_text = extract_uploaded_files_text(uploaded_files)
+        if not doc_text:
+            st.error("No usable text extracted from your document(s). Please upload valid PDF, DOCX, or TXT files.")
+        else:
+            prompt = (
+                "You are a world-class compliance analyst. Analyze the following AIF (Alternative Investment Fund) document(s) for compliance, risks, regulatory breaches, and summarize key findings. "
+                "Return your analysis in the following structure:\n\n"
+                "1. **Summary of Document(s)**\n2. **Key Compliance Risks**\n3. **Detected Regulatory Breaches**\n"
+                "4. **Recommendations**\n5. **Any Other Notable Observations**\n\n"
+                f"{doc_text}"
+            )
+            with st.spinner("AI analyzing uploaded document(s)..."):
+                report = gemini_generate(prompt)
+            st.subheader("AI Compliance Report")
+            st.markdown(report)
+            dashboard_data["analyses"].append({"name": ", ".join(f.name for f in uploaded_files), "report": report})
+            save_dashboard_data(dashboard_data)
 
 # 2. RegOS Chatbot Tab (LLM with document upload)
 with tabs[1]:
@@ -214,7 +212,7 @@ with tabs[1]:
         accept_multiple_files=True,
         key="chat_files"
     )
-    chat_files_data = [(f.name, f.read()) for f in chat_uploaded_files] if chat_uploaded_files else []
+    chat_doc_text = extract_uploaded_files_text(chat_uploaded_files) if chat_uploaded_files else None
 
     # Show chat history as bubbles
     for entry in st.session_state["chat_history"]:
@@ -239,7 +237,7 @@ with tabs[1]:
             response_text = ""
             response_placeholder = st.empty()
             try:
-                for chunk in gemini_chat(st.session_state["chat_history"], files=chat_files_data):
+                for chunk in gemini_chat(st.session_state["chat_history"], doc_text=chat_doc_text):
                     response_text += chunk
                     response_placeholder.markdown(
                         f"<div style='background-color:#013a63; color:#8fd6ff; border-radius:16px; padding:12px 18px; margin-top:2px; margin-bottom:10px; max-width:85%; align-self:flex-start; margin-right:auto;'><b>RegOS AI:</b> {response_text}</div>",
