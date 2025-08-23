@@ -11,16 +11,15 @@ import base64
 from datetime import datetime
 
 # ---------- CONFIG ----------
-st.set_page_config(page_title="Invision AIF Solutions", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Invision AIF Solutions", layout="wide")
 st.markdown(
-    "<style> .css-1v0mbdj.eknhn3m9{background: linear-gradient(90deg,#013a63,#00509e 60%,#2d82b7);} .block-container {padding-top: 2rem;} </style>",
+    "<h1 style='color:#013a63;'>Invision AIF Solutions</h1>",
     unsafe_allow_html=True,
 )
-st.markdown("<h1 style='color:#013a63;'>Invision AIF Solutions</h1>", unsafe_allow_html=True)
 st.markdown(
     """
-    <div style='font-size:1.1rem;color:#222;background:#e9f5fe;border-radius:12px;padding:10px 18px;margin-bottom:1.5rem;'>
-    🔍 <b>Analyze, chat, and monitor with next-gen compliance AI for Alternative Investment Funds.<br>
+    <div style='font-size:1.08rem;color:#222;background:#e9f5fe;border-radius:12px;padding:10px 18px;margin-bottom:1.5rem;'>
+    🔍 <b>Analyze, chat, and monitor with next-gen SEBI AIF compliance AI for Alternative Investment Funds.<br>
     <span style='color:#013a63;'>Upload documents, ask questions, track insights with an advanced dashboard.</span></b>
     </div>
     """,
@@ -33,12 +32,13 @@ GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", os.environ.get("GEMINI_API_KEY
 def get_gemini_client():
     return genai.Client(api_key=GEMINI_API_KEY)
 
-def gemini_chat(history, doc_text=None, model="gemini-2.5-flash"):
+def gemini_chat(history, doc_text=None):
     """
     history: List of dicts: [{"role": "user"/"model", "content": "..."}]
     doc_text: str, document text to inject into prompt
     """
     client = get_gemini_client()
+    model = "gemini-2.5-flash"
     contents = []
     for idx, entry in enumerate(history):
         content = entry["content"]
@@ -73,8 +73,9 @@ def gemini_chat(history, doc_text=None, model="gemini-2.5-flash"):
         if part.code_execution_result:
             yield f"\n[Code Output]\n{part.code_execution_result}\n"
 
-def gemini_generate(input_text, model="gemini-2.5-flash"):
+def gemini_generate(input_text):
     client = get_gemini_client()
+    model = "gemini-2.5-flash"
     contents = [
         types.Content(
             role="user",
@@ -142,7 +143,6 @@ def extract_text_from_txt(txt_file):
     return txt_file.read().decode(errors="ignore").strip()
 
 def extract_uploaded_files_text(uploaded_files):
-    """Returns a summary string if multiple files, or all text if one file"""
     if not uploaded_files:
         return None
     all_texts = []
@@ -179,33 +179,22 @@ def get_dashboard_data():
 def save_dashboard_data(data):
     st.session_state["dashboard_data"] = data
 
-# ---------- SIDEBAR ----------
-with st.sidebar:
-    st.markdown("<h3 style='color:#00509e;'>Quick Actions</h3>", unsafe_allow_html=True)
-    st.write("• [Contact Support](mailto:support@invisionaif.com)")
-    st.write("• [Product Roadmap](https://github.com/Sobarinetech)")
-    st.write("• [Docs & FAQ](https://github.com/Sobarinetech)")
-    st.write("• [Request New Feature](mailto:features@invisionaif.com)")
-    st.markdown("---")
-    st.write("**Current User:**", os.getenv("USER", "Guest"))
-    st.write(f"**Session Start:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-
 # ---------- TABS ----------
 tabs = st.tabs(
     [
-        "📄 Compliance Analysis",
-        "🤖 RegOS Chatbot",
-        "📊 Dashboard & Insights",
+        "Compliance Analysis (SEBI AIF)",
+        "RegOS Chatbot (SEBI AIF)",
+        "Dashboard & Insights",
     ]
 )
 dashboard_data = get_dashboard_data()
 
 # 1. Compliance Analysis Tab
 with tabs[0]:
-    st.header("📄 AIF Compliance Analysis")
+    st.header("Compliance Analysis of AIF Documents (SEBI focused)")
     st.write(
-        "Upload your AIF-related documents for direct AI analysis. The AI will extract, analyze, and summarize compliance, risks, breaches, and more. "
-        "Get detailed, structured reporting with AI-powered insights."
+        "Upload your AIF-related documents for direct SEBI compliance AI analysis. "
+        "The AI will extract, analyze, and summarize compliance, risks, breaches, and more, referencing the latest SEBI/Indian regulations and providing citations."
     )
     uploaded_files = st.file_uploader(
         "Upload document(s) (PDF, DOCX, TXT)",
@@ -213,47 +202,45 @@ with tabs[0]:
         accept_multiple_files=True,
         key="compliance_files"
     )
-    col1, col2 = st.columns([2,1])
-    with col1:
-        if uploaded_files:
-            doc_text = extract_uploaded_files_text(uploaded_files)
-            if not doc_text:
-                st.error("No usable text extracted from your document(s). Please upload valid PDF, DOCX, or TXT files.")
-            else:
-                analysis_prompt = (
-                    "You are a world-class compliance analyst AI. Analyze the following AIF (Alternative Investment Fund) document(s) for compliance, risks, regulatory breaches, and summarize key findings. "
-                    "Return your analysis in the following structure:\n\n"
-                    "1. **Summary of Document(s)**\n"
-                    "2. **Key Compliance Risks**\n"
-                    "3. **Detected Regulatory Breaches**\n"
-                    "4. **Recommendations**\n"
-                    "5. **Any Other Notable Observations**\n"
-                    "6. **Breakdown of Risk by Section (if possible)**\n"
-                    "7. **AI Confidence Level (0-100%) and Reasoning**\n"
-                    "8. **Potential Red Flags (list)**\n"
-                    "9. **Suggested Next Steps for Compliance Team**\n\n"
-                    f"{doc_text}"
-                )
-                with st.spinner("AI analyzing uploaded document(s)..."):
-                    report = gemini_generate(analysis_prompt)
-                st.subheader("AI Compliance Report")
-                st.markdown(report)
-                st.markdown(downloadable_report(report, filename="AIF-Compliance-Report.txt"), unsafe_allow_html=True)
-                dashboard_data["analyses"].append({
-                    "name": ", ".join(f.name for f in uploaded_files),
-                    "report": report,
-                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                })
-                save_dashboard_data(dashboard_data)
-    with col2:
-        st.info("**Pro Tip**: Upload multiple documents for cross-comparison. The AI will aggregate and highlight common risks, patterns, and unique findings.")
+    if uploaded_files:
+        doc_text = extract_uploaded_files_text(uploaded_files)
+        if not doc_text:
+            st.error("No usable text extracted from your document(s). Please upload valid PDF, DOCX, or TXT files.")
+        else:
+            analysis_prompt = (
+                "Act as a SEBI AIF compliance expert. Analyze the following AIF (Alternative Investment Fund) document(s) strictly for compliance with current SEBI AIF Regulations and Indian regulatory context. "
+                "For every point, provide proper grounded citations from SEBI official regulations, circulars, or Indian law. Use real-time search to ensure all referenced regulations are current. "
+                "Return your analysis in the following structure:\n\n"
+                "1. **Summary of Document(s)** (with citations)\n"
+                "2. **Key Compliance Risks** (with grounded SEBI citations)\n"
+                "3. **Detected Regulatory Breaches** (cite SEBI section/circular)\n"
+                "4. **Recommendations** (reference the specific SEBI compliance to address)\n"
+                "5. **Any Other Notable Observations** (with citations)\n"
+                "6. **Breakdown of Risk by Section** (reference relevant SEBI requirements)\n"
+                "7. **AI Confidence Level (0-100%) and Reasoning**\n"
+                "8. **Potential Red Flags** (cite regulation)\n"
+                "9. **Suggested Next Steps for Compliance Team** (with references)\n"
+                "10. **All references must cite relevant SEBI AIF regulation/circular with section number and date, if available.**\n\n"
+                f"{doc_text}"
+            )
+            with st.spinner("AI analyzing uploaded document(s) as per latest SEBI AIF regulatory context..."):
+                report = gemini_generate(analysis_prompt)
+            st.subheader("SEBI AIF Compliance Report (with citations)")
+            st.markdown(report)
+            st.markdown(downloadable_report(report, filename="AIF-SEBI-Compliance-Report.txt"), unsafe_allow_html=True)
+            dashboard_data["analyses"].append({
+                "name": ", ".join(f.name for f in uploaded_files),
+                "report": report,
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            })
+            save_dashboard_data(dashboard_data)
 
 # 2. RegOS Chatbot Tab (LLM with document upload)
 with tabs[1]:
-    st.header("🤖 RegOS Chatbot")
+    st.header("RegOS Chatbot for SEBI AIF Compliance")
     st.write(
-        "An advanced AI chatbot for regulatory, legal, and compliance queries. "
-        "You can upload documents for the AI to analyze, reference, or answer questions about your specific files."
+        "Ask regulatory, legal, or compliance questions about AIFs in India. "
+        "AI is grounded in the latest SEBI/Indian regulatory context and always provides citations."
     )
     if "chat_history" not in st.session_state:
         st.session_state["chat_history"] = []
@@ -283,23 +270,24 @@ with tabs[1]:
         user_input = st.text_input(
             "You:",
             key="chat_input",
-            placeholder="Ask a regulatory, legal, or compliance question, or request document analysis...",
-        )
-        model_choice = st.selectbox(
-            "AI Model",
-            options=["gemini-2.5-flash", "gemini-1.5-pro"],
-            index=0,
-            help="Select 'pro' for more reasoning, 'flash' for speed."
+            placeholder="Ask a SEBI AIF regulatory, legal, or compliance question, or request analysis of your uploaded document...",
         )
         submitted = st.form_submit_button("Send")
 
     if submitted and user_input.strip():
-        st.session_state["chat_history"].append({"role": "user", "content": user_input, "time": datetime.now().isoformat()})
-        with st.spinner("AI is typing..."):
+        # Enhance user input for SEBI compliance expert with citations and grounded search
+        user_query = (
+            "You are a SEBI AIF compliance expert. Answer strictly with reference to the latest SEBI AIF Regulations and Indian regulatory context. "
+            "For every point, provide grounded citations from the current SEBI regulations, circulars, or Indian law (include section number/date). "
+            "Use real-time search to ensure all referenced regulations are current and provide links/citations where possible. "
+            f"User query: {user_input}"
+        )
+        st.session_state["chat_history"].append({"role": "user", "content": user_query, "time": datetime.now().isoformat()})
+        with st.spinner("RegOS AI (SEBI expert) is typing..."):
             response_text = ""
             response_placeholder = st.empty()
             try:
-                for chunk in gemini_chat(st.session_state["chat_history"], doc_text=chat_doc_text, model=model_choice):
+                for chunk in gemini_chat(st.session_state["chat_history"], doc_text=chat_doc_text):
                     response_text += chunk
                     response_placeholder.markdown(
                         f"<div style='background-color:#e9f5fe; color:#013a63; border-radius:16px; padding:12px 18px; margin-top:2px; margin-bottom:10px; max-width:85%; align-self:flex-start; margin-right:auto;'><b>RegOS AI:</b> {response_text}</div>",
@@ -314,26 +302,22 @@ with tabs[1]:
             "prompt": user_input,
             "response": response_text,
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "model": model_choice,
         })
         save_dashboard_data(dashboard_data)
         st.rerun()
 
-    colA, colB = st.columns([1,1])
-    with colA:
-        if st.button("Clear Chat", key="clear_chat"):
-            st.session_state["chat_history"] = []
-            st.rerun()
-    with colB:
-        if st.button("Download Chat History"):
-            chat_hist = "\n\n".join(
-                f"{e['role'].capitalize()} ({e['time'][:19]}): {e['content']}" for e in st.session_state["chat_history"]
-            )
-            st.markdown(downloadable_report(chat_hist, filename="RegOS-Chat-History.txt"), unsafe_allow_html=True)
+    if st.button("Clear Chat", key="clear_chat"):
+        st.session_state["chat_history"] = []
+        st.rerun()
+    if st.button("Download Chat History"):
+        chat_hist = "\n\n".join(
+            f"{e['role'].capitalize()} ({e['time'][:19]}): {e['content']}" for e in st.session_state["chat_history"]
+        )
+        st.markdown(downloadable_report(chat_hist, filename="RegOS-Chat-History.txt"), unsafe_allow_html=True)
 
 # 3. Dashboard & Insights Tab
 with tabs[2]:
-    st.header("📊 Dashboard: Metrics, Trends & AI Insights")
+    st.header("Dashboard: Metrics, Trends & AI Insights")
     st.write(
         "Visualize compliance analysis results, AI performance metrics, chatbot usage, and key performance indicators. "
         "Track trends, download results, and get advanced breakdowns."
@@ -343,14 +327,12 @@ with tabs[2]:
     num_chats = dashboard_data["chat_turns"]
     st.metric("Documents Analyzed", num_analyses)
     st.metric("Chatbot Interactions", num_chats)
-    # More metrics
     uniq_files = set()
     for a in dashboard_data["analyses"]:
         for name in a["name"].split(","):
             uniq_files.add(name.strip())
     st.metric("Unique Files Uploaded", len(uniq_files))
 
-    # Timeline chart of usage
     if dashboard_data["analyses"]:
         df_analyses = pd.DataFrame(dashboard_data["analyses"])
         df_analyses["timestamp"] = pd.to_datetime(df_analyses["timestamp"])
@@ -376,18 +358,16 @@ with tabs[2]:
         )
         st.plotly_chart(fig2, use_container_width=True)
 
-    # AI Insights
     st.subheader("Recent Analyses")
     for a in dashboard_data["analyses"][-3:][::-1]:
         with st.expander(f"{a['name']} ({a['timestamp']})"):
             st.write(a["report"])
-            st.markdown(downloadable_report(a["report"], filename=f"{a['name']}-AIF-Report.txt"), unsafe_allow_html=True)
+            st.markdown(downloadable_report(a["report"], filename=f"{a['name']}-AIF-SEBI-Report.txt"), unsafe_allow_html=True)
 
     st.subheader("Recent Chatbot Usage")
     for c in dashboard_data["chatbot_usage"][-3:][::-1]:
         with st.expander(f"Prompt: {c['prompt'][:50]}... ({c['timestamp']})"):
             st.markdown(f"**AI Response:** {c['response']}")
-            st.markdown(f"<span style='font-size:0.9em;'>Model: {c.get('model','n/a')}</span>", unsafe_allow_html=True)
 
     st.info("All data is stored in-memory for your session only. Download reports and chat logs for your records.")
 
