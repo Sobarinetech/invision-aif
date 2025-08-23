@@ -35,7 +35,7 @@ def login():
                 if hasattr(res, "user") and res.user is not None:
                     st.session_state["user"] = res.user
                     st.success("Login successful!")
-                    st.experimental_rerun()
+                    st.rerun()
                 else:
                     st.error("Login failed. Please check your credentials or contact admin.")
             except Exception as e:
