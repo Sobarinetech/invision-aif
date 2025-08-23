@@ -31,6 +31,12 @@ st.markdown(
 SUPABASE_URL = st.secrets.get("SUPABASE_URL")
 SUPABASE_KEY = st.secrets.get("SUPABASE_KEY")
 
+CIRCULARS_COLUMNS = [
+    "id", "guid", "title", "link", "description", "pub_date", "pdf_url", "type", "ai_analysis", "analysis_status",
+    "created_at", "updated_at", "applicable_entities", "entity_keywords", "regulatory_scope", "extracted_content",
+    "processing_status", "file_size", "extraction_metadata", "analyzed_at"
+]
+
 def get_supabase_client() -> Client:
     return create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -39,7 +45,7 @@ def fetch_latest_circulars(limit=5):
     data = (
         client.table("sebi_circulars")
         .select("*")
-        .order("date", desc=True)
+        .order("pub_date", desc=True)
         .limit(limit)
         .execute()
     )
@@ -54,9 +60,9 @@ def make_circulars_context(circulars):
     for c in circulars:
         context += (
             f"- {c.get('title','')}\n"
-            f"  Date: {c.get('date','')}, Ref: {c.get('reference','')}\n"
-            f"  Summary: {c.get('summary','')}\n"
-            f"  [Full text]({c.get('url','')})\n"
+            f"  Date: {c.get('pub_date','')}, Ref: {c.get('guid','')}\n"
+            f"  Description: {c.get('description','')}\n"
+            f"  [Full text]({c.get('link','')})\n"
         )
     context += "\n"
     return context
@@ -215,6 +221,7 @@ tabs = st.tabs(
         "Compliance Analysis",
         "RegOS Chatbot",
         "Dashboard & Insights",
+        "SEBI Circulars Table"
     ]
 )
 dashboard_data = get_dashboard_data()
@@ -239,10 +246,10 @@ with tabs[0]:
     if latest_circulars:
         with st.expander("Latest SEBI Circulars & Regulatory Updates used for analysis", expanded=False):
             for c in latest_circulars:
-                st.markdown(f"**{c.get('title','')}**  \nDate: {c.get('date','')}, Ref: {c.get('reference','')}")
-                st.markdown(f"Summary: {c.get('summary','')}")
-                if c.get("url"):
-                    st.markdown(f"[Full text]({c.get('url')})")
+                st.markdown(f"**{c.get('title','')}**  \nDate: {c.get('pub_date','')}, Ref: {c.get('guid','')}")
+                st.markdown(f"Description: {c.get('description','')}")
+                if c.get("link"):
+                    st.markdown(f"[Full text]({c.get('link')})")
                 st.markdown("---")
 
     if uploaded_files:
@@ -302,10 +309,10 @@ with tabs[1]:
     if latest_circulars:
         with st.expander("Latest SEBI Circulars & Regulatory Updates used for chatbot", expanded=False):
             for c in latest_circulars:
-                st.markdown(f"**{c.get('title','')}**  \nDate: {c.get('date','')}, Ref: {c.get('reference','')}")
-                st.markdown(f"Summary: {c.get('summary','')}")
-                if c.get("url"):
-                    st.markdown(f"[Full text]({c.get('url')})")
+                st.markdown(f"**{c.get('title','')}**  \nDate: {c.get('pub_date','')}, Ref: {c.get('guid','')}")
+                st.markdown(f"Description: {c.get('description','')}")
+                if c.get("link"):
+                    st.markdown(f"[Full text]({c.get('link')})")
                 st.markdown("---")
 
     # Show chat history as bubbles
@@ -426,6 +433,20 @@ with tabs[2]:
             st.markdown(f"**AI Response:** {c['response']}")
 
     st.info("All data is stored in-memory for your session only. Download reports and chat logs for your records.")
+
+# 4. SEBI Circulars Table Tab
+with tabs[3]:
+    st.header("SEBI Circulars Table")
+    st.write("View the latest SEBI circulars and their details from the Supabase database.")
+    client = get_supabase_client()
+    circulars_data = client.table("sebi_circulars").select("*").order("pub_date", desc=True).limit(50).execute()
+    if hasattr(circulars_data, "data") and circulars_data.data:
+        df = pd.DataFrame(circulars_data.data)
+        # Only show the columns requested
+        display_cols = [c for c in CIRCULARS_COLUMNS if c in df.columns]
+        st.dataframe(df[display_cols], use_container_width=True)
+    else:
+        st.info("No circulars found in the database.")
 
 st.markdown("---")
 st.caption("Powered by Google Gemini, Streamlit, Supabase, and Plotly. Confidential & Secure. 💡")
