@@ -2,6 +2,7 @@ import os
 import streamlit as st
 from google import genai
 from google.genai import types
+from supabase import create_client, Client
 import tempfile
 import PyPDF2
 import docx
@@ -10,24 +11,50 @@ import docx
 st.set_page_config(page_title="Invision AIF Solutions", layout="wide")
 st.title("Invision AIF Solutions")
 
-# ---------- ENVIRONMENT: GOOGLE GEMINI ----------
+# ---------- SECRETS ----------
+SUPABASE_URL = st.secrets["SUPABASE_URL"]
+SUPABASE_ANON_KEY = st.secrets["SUPABASE_ANON_KEY"]
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", os.environ.get("GEMINI_API_KEY"))
+
+# ---------- SUPABASE CLIENT ----------
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+
+# ---------- LOGIN PAGE ----------
+def login():
+    if "user" not in st.session_state:
+        st.session_state["user"] = None
+
+    if st.session_state["user"] is None:
+        st.subheader("Login")
+        email = st.text_input("Email")
+        password = st.text_input("Password", type="password")
+        login_btn = st.button("Login")
+        if login_btn:
+            try:
+                res = supabase.auth.sign_in_with_password({"email": email, "password": password})
+                if hasattr(res, "user") and res.user is not None:
+                    st.session_state["user"] = res.user
+                    st.success("Login successful!")
+                    st.experimental_rerun()
+                else:
+                    st.error("Login failed. Please check your credentials or contact admin.")
+            except Exception as e:
+                st.error(f"Login failed: {e}")
+        st.stop()
+
+login()
+user = st.session_state["user"]
+st.info(f"Logged in as: {user.email}")
 
 def get_gemini_client():
     return genai.Client(api_key=GEMINI_API_KEY)
 
 def gemini_chat(history, doc_text=None):
-    """
-    history: List of dicts: [{"role": "user"/"model", "content": "..."}]
-    doc_text: str, document text to inject into prompt
-    """
     client = get_gemini_client()
     model = "gemini-2.5-flash"
     contents = []
-    # Inject document text (if any) into the latest user message
     for idx, entry in enumerate(history):
         content = entry["content"]
-        # Only add doc_text to the latest user message
         if doc_text and idx == len(history) - 1 and entry["role"] == "user":
             content += (
                 f"\n\n---\n\n"
@@ -36,7 +63,6 @@ def gemini_chat(history, doc_text=None):
             )
         parts = [types.Part.from_text(text=content)]
         contents.append(types.Content(role="user" if entry["role"] == "user" else "model", parts=parts))
-
     tools = [
         types.Tool(code_execution=types.ToolCodeExecution),
         types.Tool(googleSearch=types.GoogleSearch()),
@@ -130,7 +156,6 @@ def extract_text_from_txt(txt_file):
     return txt_file.read().decode(errors="ignore").strip()
 
 def extract_uploaded_files_text(uploaded_files):
-    """Returns a summary string if multiple files, or all text if one file"""
     if not uploaded_files:
         return None
     all_texts = []
@@ -162,6 +187,21 @@ def get_dashboard_data():
 
 def save_dashboard_data(data):
     st.session_state["dashboard_data"] = data
+
+def save_analysis_to_supabase(user_id, doc_name, report):
+    supabase.table("analyses").insert({
+        "user_id": user_id,
+        "analysis_report": report,
+        "document_id": None, # Can be linked if you also store uploaded docs
+    }).execute()
+
+def save_chat_to_supabase(user_id, prompt, response):
+    # Optionally store chats as needed
+    supabase.table("analyses").insert({
+        "user_id": user_id,
+        "analysis_report": f"Prompt: {prompt}\n\nResponse: {response}",
+        "document_id": None,
+    }).execute()
 
 # ---------- TABS ----------
 tabs = st.tabs(["Compliance Analysis", "RegOS Chatbot", "Dashboard"])
@@ -195,6 +235,7 @@ with tabs[0]:
             st.markdown(report)
             dashboard_data["analyses"].append({"name": ", ".join(f.name for f in uploaded_files), "report": report})
             save_dashboard_data(dashboard_data)
+            save_analysis_to_supabase(user.id, ", ".join(f.name for f in uploaded_files), report)
 
 # 2. RegOS Chatbot Tab (LLM with document upload)
 with tabs[1]:
@@ -250,6 +291,7 @@ with tabs[1]:
         dashboard_data["chat_turns"] += 1
         dashboard_data["chatbot_usage"].append({"prompt": user_input, "response": response_text})
         save_dashboard_data(dashboard_data)
+        save_chat_to_supabase(user.id, user_input, response_text)
         st.rerun()
 
     if st.button("Clear Chat", key="clear_chat"):
@@ -277,7 +319,7 @@ with tabs[2]:
     st.info("All data is stored in-memory for your session only.")
 
 st.markdown("---")
-st.caption("Powered by Google Gemini & Streamlit. Confidential & Secure.")
+st.caption("Powered by Google Gemini, Streamlit & Supabase. Confidential & Secure.")
 
 # ---------- REQUIREMENTS ----------
-# pip install streamlit google-genai PyPDF2 python-docx
+# pip install streamlit google-genai PyPDF2 python-docx supabase
