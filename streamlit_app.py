@@ -189,19 +189,28 @@ def save_dashboard_data(data):
     st.session_state["dashboard_data"] = data
 
 def save_analysis_to_supabase(user_id, doc_name, report):
-    supabase.table("analyses").insert({
-        "user_id": user_id,
-        "analysis_report": report,
-        "document_id": None, # Can be linked if you also store uploaded docs
-    }).execute()
+    try:
+        response = supabase.table("analyses").insert({
+            "user_id": user_id,
+            "analysis_report": report,
+            "document_id": None, # Can be linked if you also store uploaded docs
+        }).execute()
+        if "error" in str(response).lower():
+            st.error(f"Supabase insert failed: {response}")
+    except Exception as e:
+        st.error(f"Supabase insert failed: {e}")
 
 def save_chat_to_supabase(user_id, prompt, response):
-    # Optionally store chats as needed
-    supabase.table("analyses").insert({
-        "user_id": user_id,
-        "analysis_report": f"Prompt: {prompt}\n\nResponse: {response}",
-        "document_id": None,
-    }).execute()
+    try:
+        response = supabase.table("analyses").insert({
+            "user_id": user_id,
+            "analysis_report": f"Prompt: {prompt}\n\nResponse: {response}",
+            "document_id": None,
+        }).execute()
+        if "error" in str(response).lower():
+            st.error(f"Supabase chat insert failed: {response}")
+    except Exception as e:
+        st.error(f"Supabase chat insert failed: {e}")
 
 # ---------- TABS ----------
 tabs = st.tabs(["Compliance Analysis", "RegOS Chatbot", "Dashboard"])
