@@ -14,27 +14,41 @@ from supabase import create_client, Client
 # ---------- CONFIG ----------
 st.set_page_config(page_title="Invision AIF Solutions", layout="wide")
 st.markdown(
-    "<h1 style='color:#013a63;'>Invision AIF Solutions</h1>",
-    unsafe_allow_html=True,
+    "<h1 style='color:#013a63;'>Invision AIF Solutions</h1>", unsafe_allow_html=True,
 )
 st.markdown(
     """
-    <div style='font-size:1.08rem;color:#222;background:#e9f5fe;border-radius:12px;padding:10px 18px;margin-bottom:1.5rem;'>
-    🔍 <b>Analyze, chat, and monitor with next-gen compliance AI for Alternative Investment Funds.<br>
-    <span style='color:#013a63;'>Upload documents, ask questions, track insights with an advanced dashboard. Latest circulars and rules are always considered in the analysis.</span></b>
-    </div>
-    """,
+<div style='font-size:1.08rem;color:#222;background:#e9f5fe;border-radius:12px;padding:10px 18px;margin-bottom:1.5rem;'>
+🔍 <b>Analyze, chat, and monitor with next-gen compliance AI for Alternative Investment Funds.<br> <span style='color:#013a63;'>Upload documents, ask questions, track insights with an advanced dashboard. Latest circulars and rules are always considered in the analysis.</span></b>
+</div>
+""",
     unsafe_allow_html=True,
 )
 
 # ---------- SUPABASE CLIENT ----------
 SUPABASE_URL = st.secrets.get("SUPABASE_URL")
 SUPABASE_KEY = st.secrets.get("SUPABASE_KEY")
-
 CIRCULARS_COLUMNS = [
-    "id", "guid", "title", "link", "description", "pub_date", "pdf_url", "type", "ai_analysis", "analysis_status",
-    "created_at", "updated_at", "applicable_entities", "entity_keywords", "regulatory_scope", "extracted_content",
-    "processing_status", "file_size", "extraction_metadata", "analyzed_at"
+    "id",
+    "guid",
+    "title",
+    "link",
+    "description",
+    "pub_date",
+    "pdf_url",
+    "type",
+    "ai_analysis",
+    "analysis_status",
+    "created_at",
+    "updated_at",
+    "applicable_entities",
+    "entity_keywords",
+    "regulatory_scope",
+    "extracted_content",
+    "processing_status",
+    "file_size",
+    "extraction_metadata",
+    "analyzed_at",
 ]
 
 def get_supabase_client() -> Client:
@@ -60,9 +74,9 @@ def make_circulars_context(circulars):
     for c in circulars:
         context += (
             f"- {c.get('title','')}\n"
-            f"  Date: {c.get('pub_date','')}, Ref: {c.get('guid','')}\n"
-            f"  Description: {c.get('description','')}\n"
-            f"  [Full text]({c.get('link','')})\n"
+            f" Date: {c.get('pub_date','')}, Ref: {c.get('guid','')}\n"
+            f" Description: {c.get('description','')}\n"
+            f" [Full text]({c.get('link','')})\n"
         )
     context += "\n"
     return context
@@ -70,7 +84,7 @@ def make_circulars_context(circulars):
 # ---------- GOOGLE GEMINI AI CONFIG ----------
 def gemini_generate(input_text):
     client = genai.Client(
-        api_key=os.environ.get("GEMINI_API_KEY"),
+        api_key=st.secrets.get("GEMINI_API_KEY"), # Updated to use st.secrets
     )
     model = "gemini-2.5-flash"
     contents = [
@@ -104,13 +118,13 @@ def gemini_generate(input_text):
 
 def gemini_chat(history, doc_text=None, circulars_context=None):
     client = genai.Client(
-        api_key=os.environ.get("GEMINI_API_KEY"),
+        api_key=st.secrets.get("GEMINI_API_KEY"), # Updated to use st.secrets
     )
     model = "gemini-2.5-flash"
     contents = []
     for idx, entry in enumerate(history):
         content = entry["content"]
-        # Always prepend latest circulars context to the latest user message
+        # Always prepend latest circulars context to the latest user message if idx == len(history) - 1 and entry["role"] == "user":
         if idx == len(history) - 1 and entry["role"] == "user":
             if circulars_context:
                 content = f"{circulars_context}\n\n{content}"
@@ -149,7 +163,7 @@ def extract_text_from_pdf(pdf_file):
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
         tmp_file.write(pdf_file.read())
         tmp_file.flush()
-        file_path = tmp_file.name
+    file_path = tmp_file.name
     try:
         with open(file_path, "rb") as f:
             reader = PyPDF2.PdfReader(f)
@@ -166,7 +180,7 @@ def extract_text_from_docx(docx_file):
     with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as tmp_file:
         tmp_file.write(docx_file.read())
         tmp_file.flush()
-        file_path = tmp_file.name
+    file_path = tmp_file.name
     try:
         doc = docx.Document(file_path)
         text = "\n".join([para.text for para in doc.paragraphs])
@@ -221,7 +235,7 @@ tabs = st.tabs(
         "Compliance Analysis",
         "RegOS Chatbot",
         "Dashboard & Insights",
-        "SEBI Circulars Table"
+        "SEBI Circulars Table",
     ]
 )
 dashboard_data = get_dashboard_data()
@@ -238,15 +252,17 @@ with tabs[0]:
         "Upload document(s) (PDF, DOCX, TXT)",
         type=["pdf", "docx", "txt"],
         accept_multiple_files=True,
-        key="compliance_files"
+        key="compliance_files",
     )
+
     # Fetch latest circulars
     latest_circulars = fetch_latest_circulars(limit=5)
     circulars_context = make_circulars_context(latest_circulars)
+
     if latest_circulars:
         with st.expander("Latest SEBI Circulars & Regulatory Updates used for analysis", expanded=False):
             for c in latest_circulars:
-                st.markdown(f"**{c.get('title','')}**  \nDate: {c.get('pub_date','')}, Ref: {c.get('guid','')}")
+                st.markdown(f"**{c.get('title','')}** \nDate: {c.get('pub_date','')}, Ref: {c.get('guid','')}")
                 st.markdown(f"Description: {c.get('description','')}")
                 if c.get("link"):
                     st.markdown(f"[Full text]({c.get('link')})")
@@ -255,7 +271,9 @@ with tabs[0]:
     if uploaded_files:
         doc_text = extract_uploaded_files_text(uploaded_files)
         if not doc_text:
-            st.error("No usable text extracted from your document(s). Please upload valid PDF, DOCX, or TXT files.")
+            st.error(
+                "No usable text extracted from your document(s). Please upload valid PDF, DOCX, or TXT files."
+            )
         else:
             analysis_prompt = (
                 f"{circulars_context}\n"
@@ -274,17 +292,25 @@ with tabs[0]:
                 "10. **All references must cite relevant regulation/circular with section number and date, if available.**\n\n"
                 f"{doc_text}"
             )
+
             with st.spinner("AI analyzing uploaded document(s) with latest regulatory context..."):
                 report = gemini_generate(analysis_prompt)
             st.subheader("Compliance Report (with citations)")
             st.markdown(report)
-            st.markdown(downloadable_report(report, filename="AIF-Compliance-Report.txt"), unsafe_allow_html=True)
-            dashboard_data["analyses"].append({
-                "name": ", ".join(f.name for f in uploaded_files),
-                "report": report,
-                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            })
+            st.markdown(
+                downloadable_report(report, filename="AIF-Compliance-Report.txt"),
+                unsafe_allow_html=True,
+            )
+
+            dashboard_data["analyses"].append(
+                {
+                    "name": ", ".join(f.name for f in uploaded_files),
+                    "report": report,
+                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                }
+            )
             save_dashboard_data(dashboard_data)
+
 
 # 2. RegOS Chatbot Tab (LLM with document upload)
 with tabs[1]:
@@ -293,6 +319,7 @@ with tabs[1]:
         "Ask regulatory, legal, or compliance questions about AIFs in India. "
         "AI is grounded in the latest regulatory context, blends in the most recent SEBI circulars, and always provides citations."
     )
+
     if "chat_history" not in st.session_state:
         st.session_state["chat_history"] = []
 
@@ -300,16 +327,17 @@ with tabs[1]:
         "Upload documents for this chat (optional, PDF, DOCX, TXT)",
         type=["pdf", "docx", "txt"],
         accept_multiple_files=True,
-        key="chat_files"
+        key="chat_files",
     )
     chat_doc_text = extract_uploaded_files_text(chat_uploaded_files) if chat_uploaded_files else None
 
     latest_circulars = fetch_latest_circulars(limit=5)
     circulars_context = make_circulars_context(latest_circulars)
+
     if latest_circulars:
         with st.expander("Latest SEBI Circulars & Regulatory Updates used for chatbot", expanded=False):
             for c in latest_circulars:
-                st.markdown(f"**{c.get('title','')}**  \nDate: {c.get('pub_date','')}, Ref: {c.get('guid','')}")
+                st.markdown(f"**{c.get('title','')}** \nDate: {c.get('pub_date','')}, Ref: {c.get('guid','')}")
                 st.markdown(f"Description: {c.get('description','')}")
                 if c.get("link"):
                     st.markdown(f"[Full text]({c.get('link')})")
@@ -336,47 +364,55 @@ with tabs[1]:
         )
         submitted = st.form_submit_button("Send")
 
-    if submitted and user_input.strip():
-        user_query = (
-            f"{circulars_context}\n"
-            "You are a compliance expert. Answer strictly with reference to the latest Indian regulations and regulatory context. "
-            "Blend in recent SEBI circulars and official updates provided above. "
-            "For every point, provide grounded citations from the current regulations, circulars, or law (include section number/date). "
-            "Use real-time search to ensure all referenced regulations are current and provide links/citations where possible. "
-            f"User query: {user_input}"
-        )
-        st.session_state["chat_history"].append({"role": "user", "content": user_query, "time": datetime.now().isoformat()})
-        with st.spinner("RegOS AI (compliance expert) is typing..."):
-            response_text = ""
-            response_placeholder = st.empty()
-            try:
-                for chunk in gemini_chat(st.session_state["chat_history"], doc_text=chat_doc_text, circulars_context=circulars_context):
-                    response_text += chunk
-                    response_placeholder.markdown(
-                        f"<div style='background-color:#e9f5fe; color:#013a63; border-radius:16px; padding:12px 18px; margin-top:2px; margin-bottom:10px; max-width:85%; align-self:flex-start; margin-right:auto;'><b>RegOS AI:</b> {response_text}</div>",
-                        unsafe_allow_html=True,
-                    )
-            except Exception as e:
-                response_text = f"Sorry, there was an error with the AI: {e}"
-                response_placeholder.markdown(response_text)
+        if submitted and user_input.strip():
+            user_query = (
+                f"{circulars_context}\n"
+                "You are a compliance expert. Answer strictly with reference to the latest Indian regulations and regulatory context. "
+                "Blend in recent SEBI circulars and official updates provided above. "
+                "For every point, provide grounded citations from the current regulations, circulars, or law (include section number/date). "
+                "Use real-time search to ensure all referenced regulations are current and provide links/citations where possible. "
+                f"User query: {user_input}"
+            )
+            st.session_state["chat_history"].append({"role": "user", "content": user_query, "time": datetime.now().isoformat()})
+
+            with st.spinner("RegOS AI (compliance expert) is typing..."):
+                response_text = ""
+                response_placeholder = st.empty()
+                try:
+                    for chunk in gemini_chat(st.session_state["chat_history"], doc_text=chat_doc_text, circulars_context=circulars_context):
+                        response_text += chunk
+                        response_placeholder.markdown(
+                            f"<div style='background-color:#e9f5fe; color:#013a63; border-radius:16px; padding:12px 18px; margin-top:2px; margin-bottom:10px; max-width:85%; align-self:flex-start; margin-right:auto;'><b>RegOS AI:</b> {response_text}</div>",
+                            unsafe_allow_html=True,
+                        )
+                except Exception as e:
+                    response_text = f"Sorry, there was an error with the AI: {e}"
+                    response_placeholder.markdown(response_text)
+
             st.session_state["chat_history"].append({"role": "model", "content": response_text, "time": datetime.now().isoformat()})
-        dashboard_data["chat_turns"] += 1
-        dashboard_data["chatbot_usage"].append({
-            "prompt": user_input,
-            "response": response_text,
-            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        })
-        save_dashboard_data(dashboard_data)
-        st.rerun()
+
+            dashboard_data["chat_turns"] += 1
+            dashboard_data["chatbot_usage"].append(
+                {
+                    "prompt": user_input,
+                    "response": response_text,
+                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                }
+            )
+            save_dashboard_data(dashboard_data)
+            st.rerun()
 
     if st.button("Clear Chat", key="clear_chat"):
         st.session_state["chat_history"] = []
         st.rerun()
+
     if st.button("Download Chat History"):
         chat_hist = "\n\n".join(
-            f"{e['role'].capitalize()} ({e['time'][:19]}): {e['content']}" for e in st.session_state["chat_history"]
+            f"{e['role'].capitalize()} ({e['time'][:19]}): {e['content']}"
+            for e in st.session_state["chat_history"]
         )
         st.markdown(downloadable_report(chat_hist, filename="RegOS-Chat-History.txt"), unsafe_allow_html=True)
+
 
 # 3. Dashboard & Insights Tab
 with tabs[2]:
@@ -388,8 +424,10 @@ with tabs[2]:
 
     num_analyses = len(dashboard_data["analyses"])
     num_chats = dashboard_data["chat_turns"]
+
     st.metric("Documents Analyzed", num_analyses)
     st.metric("Chatbot Interactions", num_chats)
+
     uniq_files = set()
     for a in dashboard_data["analyses"]:
         for name in a["name"].split(","):
@@ -402,13 +440,14 @@ with tabs[2]:
         fig = px.bar(
             df_analyses,
             x="timestamp",
-            y=df_analyses.index+1,
+            y=df_analyses.index + 1,
             hover_data=["name"],
-            labels={"y":"Cumulative Analyses", "timestamp":"Time"},
+            labels={"y": "Cumulative Analyses", "timestamp": "Time"},
             title="Document Analysis Timeline",
             color_discrete_sequence=["#00509e"],
         )
         st.plotly_chart(fig, use_container_width=True)
+
     if dashboard_data["chatbot_usage"]:
         df_chats = pd.DataFrame(dashboard_data["chatbot_usage"])
         df_chats["timestamp"] = pd.to_datetime(df_chats["timestamp"])
@@ -416,7 +455,7 @@ with tabs[2]:
         fig2 = px.line(
             chats_per_day,
             markers=True,
-            labels={"value":"# Interactions", "timestamp":"Date"},
+            labels={"value": "# Interactions", "timestamp": "Date"},
             title="Chatbot Usage Over Time",
         )
         st.plotly_chart(fig2, use_container_width=True)
@@ -425,21 +464,29 @@ with tabs[2]:
     for a in dashboard_data["analyses"][-3:][::-1]:
         with st.expander(f"{a['name']} ({a['timestamp']})"):
             st.write(a["report"])
-            st.markdown(downloadable_report(a["report"], filename=f"{a['name']}-AIF-Compliance-Report.txt"), unsafe_allow_html=True)
+            st.markdown(
+                downloadable_report(a["report"], filename=f"{a['name']}-AIF-Compliance-Report.txt"),
+                unsafe_allow_html=True,
+            )
 
     st.subheader("Recent Chatbot Usage")
     for c in dashboard_data["chatbot_usage"][-3:][::-1]:
         with st.expander(f"Prompt: {c['prompt'][:50]}... ({c['timestamp']})"):
             st.markdown(f"**AI Response:** {c['response']}")
 
-    st.info("All data is stored in-memory for your session only. Download reports and chat logs for your records.")
+    st.info(
+        "All data is stored in-memory for your session only. Download reports and chat logs for your records."
+    )
+
 
 # 4. SEBI Circulars Table Tab
 with tabs[3]:
     st.header("SEBI Circulars Table")
     st.write("View the latest SEBI circulars and their details from the Supabase database.")
     client = get_supabase_client()
-    circulars_data = client.table("sebi_circulars").select("*").order("pub_date", desc=True).limit(50).execute()
+    circulars_data = (
+        client.table("sebi_circulars").select("*").order("pub_date", desc=True).limit(50).execute()
+    )
     if hasattr(circulars_data, "data") and circulars_data.data:
         df = pd.DataFrame(circulars_data.data)
         # Only show the columns requested
