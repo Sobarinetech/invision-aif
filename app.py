@@ -26,9 +26,10 @@ st.markdown(
 )
 
 # ---------- SUPABASE CLIENT ----------
-# Accessing secrets directly from Render environment variables via st.secrets
-SUPABASE_URL = st.secrets.get("SUPABASE_URL")
-SUPABASE_KEY = st.secrets.get("SUPABASE_KEY")
+# DIRECTLY ACCESSING ENVIRONMENT VARIABLES using os.environ.get()
+# This completely bypasses Streamlit's st.secrets mechanism for these variables.
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 CIRCULARS_COLUMNS = [
     "id",
     "guid",
@@ -53,14 +54,13 @@ CIRCULARS_COLUMNS = [
 ]
 
 def get_supabase_client() -> Client:
-    # Ensure SUPABASE_URL and SUPABASE_KEY are not None before creating client
-    # This check will now specifically look for the values from st.secrets.get()
+    # These checks ensure that the values are actually retrieved by os.environ.get()
     if not SUPABASE_URL:
-        st.error("Supabase URL (SUPABASE_URL) not found in Render environment variables.")
-        st.stop() # Stop the app if credentials are missing
+        st.error("Supabase URL (SUPABASE_URL) not found in Render environment variables. Please set it in your Render service settings.")
+        st.stop()
     if not SUPABASE_KEY:
-        st.error("Supabase Key (SUPABASE_KEY) not found in Render environment variables.")
-        st.stop() # Stop the app if credentials are missing
+        st.error("Supabase Key (SUPABASE_KEY) not found in Render environment variables. Please set it in your Render service settings.")
+        st.stop()
     return create_client(SUPABASE_URL, SUPABASE_KEY)
 
 def fetch_latest_circulars(limit=5):
@@ -95,13 +95,14 @@ def make_circulars_context(circulars):
 
 # ---------- GOOGLE GEMINI AI CONFIG ----------
 def gemini_generate(input_text):
-    gemini_api_key = st.secrets.get("GEMINI_API_KEY")
+    # DIRECTLY ACCESSING ENVIRONMENT VARIABLE using os.environ.get()
+    gemini_api_key = os.environ.get("GEMINI_API_KEY")
     if not gemini_api_key:
-        st.error("Google Gemini API Key (GEMINI_API_KEY) not found in Render environment variables.")
+        st.error("Google Gemini API Key (GEMINI_API_KEY) not found in Render environment variables. Please set it in your Render service settings.")
         st.stop()
 
     client = genai.Client(
-        api_key=gemini_api_key, # Correctly uses st.secrets.get()
+        api_key=gemini_api_key, # Uses os.environ.get() value
     )
     model = "gemini-2.5-flash"
     contents = [
@@ -134,13 +135,14 @@ def gemini_generate(input_text):
     return output
 
 def gemini_chat(history, doc_text=None, circulars_context=None):
-    gemini_api_key = st.secrets.get("GEMINI_API_KEY")
+    # DIRECTLY ACCESSING ENVIRONMENT VARIABLE using os.environ.get()
+    gemini_api_key = os.environ.get("GEMINI_API_KEY")
     if not gemini_api_key:
-        st.error("Google Gemini API Key (GEMINI_API_KEY) not found in Render environment variables.")
+        st.error("Google Gemini API Key (GEMINI_API_KEY) not found in Render environment variables. Please set it in your Render service settings.")
         st.stop()
 
     client = genai.Client(
-        api_key=gemini_api_key, # Correctly uses st.secrets.get()
+        api_key=gemini_api_key, # Uses os.environ.get() value
     )
     model = "gemini-2.5-flash"
     contents = []
@@ -505,8 +507,7 @@ with tabs[2]:
 with tabs[3]:
     st.header("SEBI Circulars Table")
     st.write("View the latest SEBI circulars and their details from the Supabase database.")
-    # The get_supabase_client() function already handles potential missing credentials.
-    # It will raise an error and stop the app if not found.
+    # The get_supabase_client() function now explicitly checks os.environ.get()
     client = get_supabase_client()
     circulars_data = (
         client.table("sebi_circulars").select("*").order("pub_date", desc=True).limit(50).execute()
