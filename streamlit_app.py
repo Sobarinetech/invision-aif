@@ -27,17 +27,50 @@ st.markdown(
 )
 
 # ---------- ENVIRONMENT: GOOGLE GEMINI ----------
-GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", os.environ.get("GEMINI_API_KEY"))
-
-def get_gemini_client():
-    return genai.Client(api_key=GEMINI_API_KEY)
+def gemini_generate(input_text):
+    client = genai.Client(
+        api_key=os.environ.get("GEMINI_API_KEY"),
+    )
+    model = "gemini-2.5-flash"
+    contents = [
+        types.Content(
+            role="user",
+            parts=[types.Part.from_text(text=input_text)],
+        ),
+    ]
+    tools = [
+        types.Tool(googleSearch=types.GoogleSearch()),
+    ]
+    generate_content_config = types.GenerateContentConfig(
+        thinking_config=types.ThinkingConfig(
+            thinking_budget=0,
+        ),
+        tools=tools,
+    )
+    output = ""
+    for chunk in client.models.generate_content_stream(
+        model=model,
+        contents=contents,
+        config=generate_content_config,
+    ):
+        # Use .text for main output
+        if hasattr(chunk, "text") and chunk.text:
+            output += chunk.text
+        # For compatibility if the chunk structure changes
+        elif hasattr(chunk, "candidates") and chunk.candidates:
+            part = chunk.candidates[0].content.parts[0]
+            if part.text:
+                output += part.text
+    return output
 
 def gemini_chat(history, doc_text=None):
     """
     history: List of dicts: [{"role": "user"/"model", "content": "..."}]
     doc_text: str, document text to inject into prompt
     """
-    client = get_gemini_client()
+    client = genai.Client(
+        api_key=os.environ.get("GEMINI_API_KEY"),
+    )
     model = "gemini-2.5-flash"
     contents = []
     for idx, entry in enumerate(history):
@@ -51,61 +84,25 @@ def gemini_chat(history, doc_text=None):
         parts = [types.Part.from_text(text=content)]
         contents.append(types.Content(role="user" if entry["role"] == "user" else "model", parts=parts))
     tools = [
-        types.Tool(code_execution=types.ToolCodeExecution),
         types.Tool(googleSearch=types.GoogleSearch()),
     ]
     generate_content_config = types.GenerateContentConfig(
-        thinking_config=types.ThinkingConfig(thinking_budget=-1),
-        tools=tools,
-    )
-    for chunk in client.models.generate_content_stream(
-        model=model,
-        contents=contents,
-        config=generate_content_config,
-    ):
-        if not chunk.candidates or not chunk.candidates[0].content or not chunk.candidates[0].content.parts:
-            continue
-        part = chunk.candidates[0].content.parts[0]
-        if part.text:
-            yield part.text
-        if part.executable_code:
-            yield f"\n[Executable Code]\n{part.executable_code}\n"
-        if part.code_execution_result:
-            yield f"\n[Code Output]\n{part.code_execution_result}\n"
-
-def gemini_generate(input_text):
-    client = get_gemini_client()
-    model = "gemini-2.5-flash"
-    contents = [
-        types.Content(
-            role="user",
-            parts=[types.Part.from_text(text=input_text)],
+        thinking_config=types.ThinkingConfig(
+            thinking_budget=0,
         ),
-    ]
-    tools = [
-        types.Tool(code_execution=types.ToolCodeExecution),
-        types.Tool(googleSearch=types.GoogleSearch()),
-    ]
-    generate_content_config = types.GenerateContentConfig(
-        thinking_config=types.ThinkingConfig(thinking_budget=-1),
         tools=tools,
     )
-    output = ""
     for chunk in client.models.generate_content_stream(
         model=model,
         contents=contents,
         config=generate_content_config,
     ):
-        if not chunk.candidates or not chunk.candidates[0].content or not chunk.candidates[0].content.parts:
-            continue
-        part = chunk.candidates[0].content.parts[0]
-        if part.text:
-            output += part.text
-        if part.executable_code:
-            output += f"\n[Executable Code]\n{part.executable_code}\n"
-        if part.code_execution_result:
-            output += f"\n[Code Output]\n{part.code_execution_result}\n"
-    return output
+        if hasattr(chunk, "text") and chunk.text:
+            yield chunk.text
+        elif hasattr(chunk, "candidates") and chunk.candidates:
+            part = chunk.candidates[0].content.parts[0]
+            if part.text:
+                yield part.text
 
 # ---------- FILE TEXT EXTRACTION ----------
 def extract_text_from_pdf(pdf_file):
