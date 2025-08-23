@@ -4,3 +4,4 @@ fpdf
 PyPDF2
 python-docx
 google-genai
+supabase
