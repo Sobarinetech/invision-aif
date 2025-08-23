@@ -54,8 +54,12 @@ CIRCULARS_COLUMNS = [
 
 def get_supabase_client() -> Client:
     # Ensure SUPABASE_URL and SUPABASE_KEY are not None before creating client
-    if not SUPABASE_URL or not SUPABASE_KEY:
-        st.error("Supabase credentials not found. Please set SUPABASE_URL and SUPABASE_KEY in Render environment variables.")
+    # This check will now specifically look for the values from st.secrets.get()
+    if not SUPABASE_URL:
+        st.error("Supabase URL (SUPABASE_URL) not found in Render environment variables.")
+        st.stop() # Stop the app if credentials are missing
+    if not SUPABASE_KEY:
+        st.error("Supabase Key (SUPABASE_KEY) not found in Render environment variables.")
         st.stop() # Stop the app if credentials are missing
     return create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -93,11 +97,11 @@ def make_circulars_context(circulars):
 def gemini_generate(input_text):
     gemini_api_key = st.secrets.get("GEMINI_API_KEY")
     if not gemini_api_key:
-        st.error("Google Gemini API Key not found. Please set GEMINI_API_KEY in Render environment variables.")
+        st.error("Google Gemini API Key (GEMINI_API_KEY) not found in Render environment variables.")
         st.stop()
 
     client = genai.Client(
-        api_key=gemini_api_key, # Updated to use st.secrets
+        api_key=gemini_api_key, # Correctly uses st.secrets.get()
     )
     model = "gemini-2.5-flash"
     contents = [
@@ -132,11 +136,11 @@ def gemini_generate(input_text):
 def gemini_chat(history, doc_text=None, circulars_context=None):
     gemini_api_key = st.secrets.get("GEMINI_API_KEY")
     if not gemini_api_key:
-        st.error("Google Gemini API Key not found. Please set GEMINI_API_KEY in Render environment variables.")
+        st.error("Google Gemini API Key (GEMINI_API_KEY) not found in Render environment variables.")
         st.stop()
 
     client = genai.Client(
-        api_key=gemini_api_key, # Updated to use st.secrets
+        api_key=gemini_api_key, # Correctly uses st.secrets.get()
     )
     model = "gemini-2.5-flash"
     contents = []
