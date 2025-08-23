@@ -26,6 +26,7 @@ st.markdown(
 )
 
 # ---------- SUPABASE CLIENT ----------
+# Accessing secrets directly from Render environment variables via st.secrets
 SUPABASE_URL = st.secrets.get("SUPABASE_URL")
 SUPABASE_KEY = st.secrets.get("SUPABASE_KEY")
 CIRCULARS_COLUMNS = [
@@ -52,19 +53,26 @@ CIRCULARS_COLUMNS = [
 ]
 
 def get_supabase_client() -> Client:
+    # Ensure SUPABASE_URL and SUPABASE_KEY are not None before creating client
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        st.error("Supabase credentials not found. Please set SUPABASE_URL and SUPABASE_KEY in Render environment variables.")
+        st.stop() # Stop the app if credentials are missing
     return create_client(SUPABASE_URL, SUPABASE_KEY)
 
 def fetch_latest_circulars(limit=5):
-    client = get_supabase_client()
-    data = (
-        client.table("sebi_circulars")
-        .select("*")
-        .order("pub_date", desc=True)
-        .limit(limit)
-        .execute()
-    )
-    if hasattr(data, "data"):
-        return data.data
+    try:
+        client = get_supabase_client()
+        data = (
+            client.table("sebi_circulars")
+            .select("*")
+            .order("pub_date", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        if hasattr(data, "data"):
+            return data.data
+    except Exception as e:
+        st.error(f"Error fetching circulars from Supabase: {e}")
     return []
 
 def make_circulars_context(circulars):
@@ -83,8 +91,13 @@ def make_circulars_context(circulars):
 
 # ---------- GOOGLE GEMINI AI CONFIG ----------
 def gemini_generate(input_text):
+    gemini_api_key = st.secrets.get("GEMINI_API_KEY")
+    if not gemini_api_key:
+        st.error("Google Gemini API Key not found. Please set GEMINI_API_KEY in Render environment variables.")
+        st.stop()
+
     client = genai.Client(
-        api_key=st.secrets.get("GEMINI_API_KEY"), # Updated to use st.secrets
+        api_key=gemini_api_key, # Updated to use st.secrets
     )
     model = "gemini-2.5-flash"
     contents = [
@@ -117,8 +130,13 @@ def gemini_generate(input_text):
     return output
 
 def gemini_chat(history, doc_text=None, circulars_context=None):
+    gemini_api_key = st.secrets.get("GEMINI_API_KEY")
+    if not gemini_api_key:
+        st.error("Google Gemini API Key not found. Please set GEMINI_API_KEY in Render environment variables.")
+        st.stop()
+
     client = genai.Client(
-        api_key=st.secrets.get("GEMINI_API_KEY"), # Updated to use st.secrets
+        api_key=gemini_api_key, # Updated to use st.secrets
     )
     model = "gemini-2.5-flash"
     contents = []
@@ -483,6 +501,8 @@ with tabs[2]:
 with tabs[3]:
     st.header("SEBI Circulars Table")
     st.write("View the latest SEBI circulars and their details from the Supabase database.")
+    # The get_supabase_client() function already handles potential missing credentials.
+    # It will raise an error and stop the app if not found.
     client = get_supabase_client()
     circulars_data = (
         client.table("sebi_circulars").select("*").order("pub_date", desc=True).limit(50).execute()
