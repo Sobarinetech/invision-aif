@@ -11,6 +11,19 @@ import base64
 from datetime import datetime
 from supabase import create_client, Client
 
+# Extra imports for Portfolio Company Monitoring
+import requests
+from googleapiclient.discovery import build
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+from bs4 import BeautifulSoup, XMLParsedAsHTMLWarning
+from langdetect import detect
+import re
+from textblob import TextBlob
+from wordcloud import WordCloud
+import matplotlib.pyplot as plt
+import warnings
+
 # ---------- CONFIG ----------
 st.set_page_config(page_title="Invision AIF Solutions", layout="wide")
 st.markdown(
@@ -221,7 +234,8 @@ tabs = st.tabs(
         "Compliance Analysis",
         "RegOS Chatbot",
         "Dashboard & Insights",
-        "SEBI Circulars Table"
+        "SEBI Circulars Table",
+        "Portfolio Company Monitoring"
     ]
 )
 dashboard_data = get_dashboard_data()
@@ -448,8 +462,160 @@ with tabs[3]:
     else:
         st.info("No circulars found in the database.")
 
+# 5. Portfolio Company Monitoring Tab
+with tabs[4]:
+    warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
+    st.header("Portfolio Company Monitoring")
+    st.write(
+        """
+        Monitor news, mentions, and details for your Alternative Investment Fund portfolio companies.
+        Search the entire web for news, events, or relevant updates. Enter company names below, and the tool will scan the web for recent mentions across news, blogs, and other sources.
+        """
+    )
+
+    # Set up the Google API keys and Custom Search Engine ID
+    GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
+    GOOGLE_SEARCH_ENGINE_ID = st.secrets["GOOGLE_SEARCH_ENGINE_ID"]
+
+    # Initializing session state for detected matches
+    if 'portfolio_matches' not in st.session_state:
+        st.session_state.portfolio_matches = []
+
+    # Input for list of portfolio companies
+    company_list = st.text_area("Enter portfolio company names, one per line:", height=120, placeholder="Company A\nCompany B\nCompany C")
+    company_names = [c.strip() for c in company_list.splitlines() if c.strip()]
+
+    # Date filter (last N days)
+    date_filter_days = st.slider("Restrict search to news from the past N days", 1, 60, 14)
+
+    # Helper: Preprocess text
+    def preprocess_text(text):
+        text = text.lower()
+        text = re.sub(r'[^a-zA-Z\s]', '', text)
+        tokens = text.split()
+        stop_words = set([
+            'i', 'me', 'my', 'myself', 'we', 'our', 'ours', 'ourselves', 'you', 'your', 'yours', 'yourself', 'yourselves',
+            'he', 'him', 'his', 'himself', 'she', 'her', 'hers', 'herself', 'it', 'its', 'itself', 'they', 'them', 'their',
+            'theirs', 'themselves', 'what', 'which', 'who', 'whom', 'this', 'that', 'these', 'those', 'am', 'is', 'are',
+            'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'having', 'do', 'does', 'did', 'doing', 'a', 'an',
+            'the', 'and', 'but', 'if', 'or', 'because', 'as', 'until', 'while', 'of', 'at', 'by', 'for', 'with', 'about',
+            'against', 'between', 'into', 'through', 'during', 'before', 'after', 'above', 'below', 'to', 'from', 'up',
+            'down', 'in', 'out', 'on', 'off', 'over', 'under', 'again', 'further', 'then', 'once', 'here', 'there', 'when',
+            'where', 'why', 'how', 'all', 'any', 'both', 'each', 'few', 'more', 'most', 'other', 'some', 'such', 'no', 'nor',
+            'not', 'only', 'own', 'same', 'so', 'than', 'too', 'very', 's', 't', 'can', 'will', 'just', 'don', 'should', 'now'
+        ])
+        filtered_tokens = [word for word in tokens if word not in stop_words]
+        return " ".join(filtered_tokens)
+
+    # Search and scan button
+    if st.button("🔎 Scan News & Mentions for Portfolio Companies"):
+        if not company_names:
+            st.error("Please provide at least one company name.")
+        else:
+            with st.spinner('Scanning web for company news and mentions...'):
+                service = build("customsearch", "v1", developerKey=GOOGLE_API_KEY)
+                from datetime import timedelta
+                import time as pytime
+                import datetime as dt
+
+                # Reset session state for detected matches
+                st.session_state.portfolio_matches = []
+
+                for company in company_names:
+                    # Query for company, restrict to news and recent N days
+                    search_query = f'"{company}"'
+                    date_restrict = f"y[{(datetime.now() - timedelta(days=date_filter_days)).strftime('%Y%m%d')}]"  # dateRestrict=y[20230601]
+                    try:
+                        response = service.cse().list(
+                            q=search_query,
+                            cx=GOOGLE_SEARCH_ENGINE_ID,
+                            num=8,
+                            sort=f"date",
+                            dateRestrict=date_restrict,
+                            gl="in",  # India focus
+                            cr="countryIN"
+                        ).execute()
+                        for result in response.get('items', []):
+                            url = result['link']
+                            title = result.get('title', '')
+                            snippet = result.get('snippet', '')
+                            pagedate = result.get('pagemap', {}).get('metatags', [{}])[0].get('article:published_time','')
+                            try:
+                                content_response = requests.get(url, timeout=10)
+                                web_content = content_response.text if content_response.status_code == 200 else ""
+                                soup = BeautifulSoup(web_content, "html.parser")
+                                paragraphs = soup.find_all("p")
+                                web_text = " ".join([para.get_text() for para in paragraphs])
+                                # Sentiment
+                                sentiment = ""
+                                if web_text:
+                                    tb = TextBlob(web_text[:2000])
+                                    sentiment = tb.sentiment.polarity
+                                # Detect Language
+                                lang = ""
+                                if web_text:
+                                    try:
+                                        lang = detect(web_text)
+                                    except Exception:
+                                        lang = ""
+                                st.session_state.portfolio_matches.append({
+                                    "Company": company,
+                                    "URL": url,
+                                    "Title": title,
+                                    "Snippet": snippet[:240],
+                                    "Date": pagedate[:10] if pagedate else "",
+                                    "Language": lang,
+                                    "Sentiment": sentiment,
+                                })
+                                pytime.sleep(1.0)  # avoid API throttling
+                            except Exception:
+                                continue
+                    except Exception as e:
+                        st.warning(f"Error searching for {company}: {e}")
+
+            # Display dashboard results
+            if st.session_state.portfolio_matches:
+                st.success(f"News & mentions found for {len(st.session_state.portfolio_matches)} company-mentions!")
+                df = pd.DataFrame(st.session_state.portfolio_matches)
+                st.dataframe(df, use_container_width=True)
+
+                # Show company-wise breakdown
+                st.subheader("Company-wise Mentions Count")
+                mentions_per_company = df['Company'].value_counts()
+                fig = px.bar(
+                    mentions_per_company,
+                    labels={"value":"# Mentions", "Company":"Company"},
+                    title="Mentions per Company",
+                    color_discrete_sequence=["#5e35b1"]
+                )
+                st.plotly_chart(fig, use_container_width=True)
+
+                # WordCloud of titles/snippets
+                st.subheader("Word Cloud of News Headlines & Snippets")
+                all_text = " ".join(df["Title"].fillna("").tolist() + df["Snippet"].fillna("").tolist())
+                if all_text.strip():
+                    wordcloud = WordCloud(width=800, height=400, background_color='white').generate(all_text)
+                    plt.figure(figsize=(8, 8))
+                    plt.imshow(wordcloud, interpolation='bilinear')
+                    plt.axis('off')
+                    st.pyplot(plt)
+
+                # Download option
+                def convert_df(df):
+                    return df.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="📥 Download Mentions as CSV",
+                    data=convert_df(df),
+                    file_name="portfolio_mentions.csv",
+                    mime="text/csv"
+                )
+            else:
+                st.info("No news or web mentions found for your portfolio companies in the recent period.")
+
+    st.caption("Uses Google Custom Search, BeautifulSoup, TextBlob, wordcloud, and Matplotlib. Results subject to Google CSE and web content restrictions.")
+
 st.markdown("---")
 st.caption("Powered by Google Gemini, Streamlit, Supabase, and Plotly. Confidential & Secure. 💡")
 
 # ---------- REQUIREMENTS ----------
-# pip install streamlit google-genai PyPDF2 python-docx pandas plotly supabase
+# pip install streamlit google-genai PyPDF2 python-docx pandas plotly supabase google-api-python-client scikit-learn beautifulsoup4 langdetect textblob wordcloud matplotlib
