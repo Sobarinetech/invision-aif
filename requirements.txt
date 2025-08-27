@@ -6,3 +6,10 @@ python-docx
 google-genai
 supabase
 plotly
+google-api-python-client 
+scikit-learn
+beautifulsoup4 
+langdetect 
+textblob
+wordcloud
+matplotlib
