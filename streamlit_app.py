@@ -273,10 +273,20 @@ def get_dashboard_data():
     if "dashboard_data" not in st.session_state:
         st.session_state["dashboard_data"] = {
             "analyses": [],
-            "sec_ria_analyses": [], # New entry for SEC RIA analyses
+            "sec_ria_analyses": [], # Initialize sec_ria_analyses here
             "chat_turns": 0,
             "chatbot_usage": [],
         }
+    # Ensure all keys exist, especially if session_state was partially initialized
+    if "sec_ria_analyses" not in st.session_state["dashboard_data"]:
+        st.session_state["dashboard_data"]["sec_ria_analyses"] = []
+    if "analyses" not in st.session_state["dashboard_data"]:
+        st.session_state["dashboard_data"]["analyses"] = []
+    if "chat_turns" not in st.session_state["dashboard_data"]:
+        st.session_state["dashboard_data"]["chat_turns"] = 0
+    if "chatbot_usage" not in st.session_state["dashboard_data"]:
+        st.session_state["dashboard_data"]["chatbot_usage"] = []
+
     return st.session_state["dashboard_data"]
 
 def save_dashboard_data(data):
@@ -560,7 +570,7 @@ with tabs[3]: # Changed index to 3
             title="AIF Document Analysis Timeline",
             color_discrete_sequence=["#00509e"],
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch') # Changed use_container_width to width='stretch'
 
     if dashboard_data["sec_ria_analyses"]:
         df_sec_ria_analyses = pd.DataFrame(dashboard_data["sec_ria_analyses"])
@@ -574,7 +584,7 @@ with tabs[3]: # Changed index to 3
             title="SEC RIA Document Analysis Timeline",
             color_discrete_sequence=["#28a745"], # Different color for distinction
         )
-        st.plotly_chart(fig_sec_ria, use_container_width=True)
+        st.plotly_chart(fig_sec_ria, width='stretch') # Changed use_container_width to width='stretch'
 
 
     if dashboard_data["chatbot_usage"]:
@@ -587,7 +597,7 @@ with tabs[3]: # Changed index to 3
             labels={"value":"# Interactions", "timestamp":"Date"},
             title="Chatbot Usage Over Time",
         )
-        st.plotly_chart(fig2, use_container_width=True)
+        st.plotly_chart(fig2, width='stretch') # Changed use_container_width to width='stretch'
 
     st.subheader("Recent AIF Analyses")
     for a in dashboard_data["analyses"][-3:][::-1]:
@@ -618,7 +628,7 @@ with tabs[4]: # Changed index to 4
         df = pd.DataFrame(circulars_data.data)
         # Only show the columns requested
         display_cols = [c for c in CIRCULARS_COLUMNS if c in df.columns]
-        st.dataframe(df[display_cols], use_container_width=True)
+        st.dataframe(df[display_cols], width='stretch') # Changed use_container_width to width='stretch'
     else:
         st.info("No circulars found in the database.")
 
@@ -737,7 +747,7 @@ with tabs[5]: # Changed index to 5
             if st.session_state.portfolio_matches:
                 st.success(f"News & mentions found for {len(st.session_state.portfolio_matches)} company-mentions!")
                 df = pd.DataFrame(st.session_state.portfolio_matches)
-                st.dataframe(df, use_container_width=True)
+                st.dataframe(df, width='stretch') # Changed use_container_width to width='stretch'
 
                 # Show company-wise breakdown
                 st.subheader("Company-wise Mentions Count")
@@ -748,7 +758,7 @@ with tabs[5]: # Changed index to 5
                     title="Mentions per Company",
                     color_discrete_sequence=["#5e35b1"]
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch') # Changed use_container_width to width='stretch'
 
                 # WordCloud of titles/snippets
                 st.subheader("Word Cloud of News Headlines & Snippets")
