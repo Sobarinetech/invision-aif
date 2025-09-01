@@ -25,16 +25,98 @@ import matplotlib.pyplot as plt
 import warnings
 
 # ---------- CONFIG ----------
-st.set_page_config(page_title="Invision AIF Solutions", layout="wide")
+st.set_page_config(page_title="Invision AIF & RIA Solutions", layout="wide")
 st.markdown(
-    "<h1 style='color:#013a63;'>Invision AIF Solutions</h1>",
+    """
+    <style>
+    .reportview-container .main .block-container {
+        padding-top: 2rem;
+        padding-right: 2rem;
+        padding-left: 2rem;
+        padding-bottom: 2rem;
+    }
+    .stApp {
+        background-color: #f0f2f6;
+    }
+    .stTabs [data-baseweb="tab-list"] button [data-testid="stMarkdownContainer"] p {
+        font-size: 1.1rem;
+        font-weight: bold;
+    }
+    .stButton>button {
+        background-color: #00509e;
+        color: white;
+        border-radius: 8px;
+        padding: 10px 20px;
+        font-size: 1rem;
+        border: none;
+        cursor: pointer;
+        transition: background-color 0.3s;
+    }
+    .stButton>button:hover {
+        background-color: #003f7f;
+    }
+    .stTextArea, .stTextInput, .stFileUploader {
+        border-radius: 8px;
+        border: 1px solid #ced4da;
+    }
+    .stAlert {
+        border-radius: 8px;
+    }
+    h1 {
+        color: #013a63;
+        text-align: center;
+        margin-bottom: 1.5rem;
+    }
+    h2, h3 {
+        color: #013a63;
+    }
+    .css-1d391kg e16z0gm2 label { /* This targets the label of the multiselect */
+        font-weight: bold;
+        color: #013a63;
+    }
+    .stMarkdown div[data-testid="stMarkdownContainer"] {
+        background-color: #e9f5fe;
+        border-left: 5px solid #00509e;
+        padding: 15px;
+        border-radius: 8px;
+        margin-bottom: 1rem;
+    }
+    .chat-bubble-user {
+        background: linear-gradient(90deg, #00509e, #2d82b7 60%);
+        color: #fff;
+        border-radius: 16px;
+        padding: 12px 18px;
+        margin-top: 10px;
+        margin-bottom: 2px;
+        max-width: 85%;
+        align-self: flex-end;
+        margin-left: auto;
+    }
+    .chat-bubble-ai {
+        background-color: #e9f5fe;
+        color: #013a63;
+        border-radius: 16px;
+        padding: 12px 18px;
+        margin-top: 2px;
+        margin-bottom: 10px;
+        max-width: 85%;
+        align-self: flex-start;
+        margin-right: auto;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+st.markdown(
+    "<h1 style='color:#013a63;'>Invision AIF & RIA Solutions</h1>",
     unsafe_allow_html=True,
 )
 st.markdown(
     """
     <div style='font-size:1.08rem;color:#222;background:#e9f5fe;border-radius:12px;padding:10px 18px;margin-bottom:1.5rem;'>
-    🔍 <b>Analyze, chat, and monitor with next-gen compliance AI for Alternative Investment Funds.<br>
-    <span style='color:#013a63;'>Upload documents, ask questions, track insights with an advanced dashboard. Latest circulars and rules are always considered in the analysis.</span></b>
+    🔍 <b>Analyze, chat, and monitor with next-gen compliance AI for Alternative Investment Funds and Registered Investment Advisers.<br>
+    <span style='color:#013a63;'>Upload documents, ask questions, and track insights with an advanced platform. Latest circulars and rules are always considered in the analysis.</span></b>
     </div>
     """,
     unsafe_allow_html=True,
@@ -66,10 +148,10 @@ def fetch_latest_circulars(limit=5, table_name="sebi_circulars"):
         return data.data
     return []
 
-def make_circulars_context(circulars):
+def make_circulars_context(circulars, regulator="SEBI"):
     if not circulars:
         return ""
-    context = "Here are the most recent regulatory circulars and updates for context:\n"
+    context = f"Here are the most recent {regulator} circulars and updates for regulatory context:\n"
     for c in circulars:
         context += (
             f"- {c.get('title','')}\n"
@@ -156,7 +238,7 @@ def gemini_chat(history, doc_text=None, circulars_context=None):
             if part.text:
                 yield part.text
 
-# New Edge Function for SEC RIA Compliance Analysis
+# Edge Function for SEC RIA Compliance Analysis
 def gemini_analyze_sec_compliance(doc_text, sec_circulars_context):
     client = genai.Client(
         api_key=os.environ.get("GEMINI_API_KEY"),
@@ -264,7 +346,7 @@ def extract_uploaded_files_text(uploaded_files):
         return None
     return "\n\n".join(all_texts)
 
-def downloadable_report(report, filename="AIF-Compliance-Report.txt"):
+def downloadable_report(report, filename="Compliance-Report.txt"):
     b64 = base64.b64encode(report.encode()).decode()
     return f'<a href="data:file/txt;base64,{b64}" download="{filename}" style="color:#00509e;">⬇️ Download Report</a>'
 
@@ -273,7 +355,7 @@ def get_dashboard_data():
     if "dashboard_data" not in st.session_state:
         st.session_state["dashboard_data"] = {
             "analyses": [],
-            "sec_ria_analyses": [], # Initialize sec_ria_analyses here
+            "sec_ria_analyses": [],
             "chat_turns": 0,
             "chatbot_usage": [],
         }
@@ -295,33 +377,36 @@ def save_dashboard_data(data):
 # ---------- TABS ----------
 tabs = st.tabs(
     [
-        "Compliance Analysis",
-        "SEC RIA Compliance", # New tab
+        "AIF Compliance Analysis",
+        "SEC RIA Compliance",
         "RegOS Chatbot",
-        "Dashboard & Insights",
-        "SEBI Circulars Table",
         "Portfolio Company Monitoring"
     ]
 )
 dashboard_data = get_dashboard_data()
 
-# 1. Compliance Analysis Tab (Existing)
+# 1. AIF Compliance Analysis Tab
 with tabs[0]:
-    st.header("Compliance Analysis of AIF Documents")
-    st.write(
-        "Upload your AIF-related documents for direct compliance AI analysis. "
-        "The AI will extract, analyze, and summarize compliance, risks, breaches, and more, referencing the latest regulations and providing citations. "
-        "Recent SEBI circulars and regulatory updates are automatically blended into the analysis."
+    st.header("AIF Document Compliance Analysis")
+    st.markdown(
+        """
+        <div class="stMarkdown">
+        Upload your Alternative Investment Fund (AIF) related documents for direct compliance AI analysis.
+        The AI will extract, analyze, and summarize compliance, risks, breaches, and provide recommendations,
+        referencing the latest SEBI regulations and providing grounded citations.
+        Recent SEBI circulars and regulatory updates are automatically blended into the analysis.
+        </div>
+        """, unsafe_allow_html=True
     )
     uploaded_files = st.file_uploader(
-        "Upload document(s) (PDF, DOCX, TXT)",
+        "Upload AIF document(s) (PDF, DOCX, TXT)",
         type=["pdf", "docx", "txt"],
         accept_multiple_files=True,
         key="compliance_files"
     )
     # Fetch latest circulars
     latest_circulars = fetch_latest_circulars(limit=5, table_name="sebi_circulars")
-    circulars_context = make_circulars_context(latest_circulars)
+    circulars_context = make_circulars_context(latest_circulars, regulator="SEBI")
     if latest_circulars:
         with st.expander("Latest SEBI Circulars & Regulatory Updates used for analysis", expanded=False):
             for c in latest_circulars:
@@ -353,39 +438,42 @@ with tabs[0]:
                 "10. **All references must cite relevant regulation/circular with section number and date, if available.**\n\n"
                 f"{doc_text}"
             )
-            with st.spinner("AI analyzing uploaded document(s) with latest regulatory context..."):
-                report = gemini_generate(analysis_prompt)
-            st.subheader("Compliance Report (with citations)")
-            st.markdown(report)
-            st.markdown(downloadable_report(report, filename="AIF-Compliance-Report.txt"), unsafe_allow_html=True)
-            dashboard_data["analyses"].append({
-                "name": ", ".join(f.name for f in uploaded_files),
-                "report": report,
-                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            })
-            save_dashboard_data(dashboard_data)
+            if st.button("Analyze AIF Compliance", key="analyze_aif_compliance"):
+                with st.spinner("AI analyzing uploaded AIF document(s) with latest SEBI regulatory context..."):
+                    report = gemini_generate(analysis_prompt)
+                st.subheader("AIF Compliance Report (with citations)")
+                st.markdown(report)
+                st.markdown(downloadable_report(report, filename="AIF-Compliance-Report.txt"), unsafe_allow_html=True)
+                dashboard_data["analyses"].append({
+                    "name": ", ".join(f.name for f in uploaded_files),
+                    "report": report,
+                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                })
+                save_dashboard_data(dashboard_data)
 
-# 2. New SEC RIA Compliance Tab
+# 2. SEC RIA Compliance Tab
 with tabs[1]:
     st.header("SEC RIA Compliance Analysis")
-    st.write(
-        "Upload your documents for direct SEC Registered Investment Adviser (RIA) compliance AI analysis. "
-        "The AI will analyze and summarize compliance, risks, and potential breaches against core SEC RIA obligations, "
-        "referencing the latest SEC regulations and providing citations."
+    st.markdown(
+        """
+        <div class="stMarkdown">
+        Upload your documents for direct SEC Registered Investment Adviser (RIA) compliance AI analysis.
+        The AI will analyze and summarize compliance, risks, and potential breaches against core SEC RIA obligations,
+        referencing the latest SEC regulations and providing grounded citations.
+        </div>
+        """, unsafe_allow_html=True
     )
 
     sec_uploaded_files = st.file_uploader(
-        "Upload document(s) (PDF, DOCX, TXT) for SEC RIA compliance review",
+        "Upload SEC RIA document(s) (PDF, DOCX, TXT) for compliance review",
         type=["pdf", "docx", "txt"],
         accept_multiple_files=True,
         key="sec_ria_compliance_files"
     )
 
     # Simulate fetching SEC circulars/guidance from a theoretical "sec_circulars" table
-    # In a real application, you would populate this table with actual SEC releases.
-    # For now, it will return an empty list or mock data.
-    sec_circulars = fetch_latest_circulars(limit=5, table_name="sec_circulars") # Assuming a table named sec_circulars
-    sec_circulars_context = make_circulars_context(sec_circulars)
+    sec_circulars = fetch_latest_circulars(limit=5, table_name="sec_circulars")
+    sec_circulars_context = make_circulars_context(sec_circulars, regulator="SEC")
     if sec_circulars:
         with st.expander("Latest SEC Guidance & Regulatory Updates used for analysis", expanded=False):
             for c in sec_circulars:
@@ -401,9 +489,11 @@ with tabs[1]:
     st.subheader("Core SEC Compliance Obligations & Document Selection")
     st.markdown(
         """
-        Below are key SEC RIA compliance obligations. Select the document type(s) your uploaded files pertain to.
-        This helps the AI focus its analysis.
-        """
+        <div class="stMarkdown">
+        To help the AI focus its analysis, please select the type(s) of documents you are uploading
+        relative to the core SEC RIA compliance obligations.
+        </div>
+        """, unsafe_allow_html=True
     )
 
     sec_document_types = st.multiselect(
@@ -411,12 +501,13 @@ with tabs[1]:
         [
             "Form ADV Part 1 & Part 2",
             "Form CRS (Client Relationship Summary)",
-            "Compliance Program/Manual",
-            "Code of Ethics",
-            "Custody Rule related documents (e.g., audit reports)",
-            "Marketing Materials/Advertising",
-            "Books & Records (e.g., client agreements, trade records)",
-            "Other Regulatory Filings",
+            "Compliance Program/Manual (Rule 206(4)-7)",
+            "Code of Ethics (Rule 204A-1)",
+            "Custody Rule related documents (Rule 206(4)-2, e.g., audit reports)",
+            "Marketing Materials/Advertising (Rule 206(4)-1)",
+            "Books & Records (Rule 204-2, e.g., client agreements, trade records)",
+            "Political Contributions (if covered by pay-to-play rule)",
+            "SEC Examination related documents",
             "General Internal Policies & Procedures"
         ],
         key="sec_doc_type_selector"
@@ -427,7 +518,7 @@ with tabs[1]:
         if not sec_doc_text:
             st.error("No usable text extracted from your document(s). Please upload valid PDF, DOCX, or TXT files.")
         else:
-            if st.button("Analyze SEC RIA Compliance"):
+            if st.button("Analyze SEC RIA Compliance", key="analyze_sec_ria_compliance"):
                 with st.spinner("AI analyzing uploaded document(s) against SEC RIA regulations..."):
                     sec_ria_report = gemini_analyze_sec_compliance(sec_doc_text, sec_circulars_context)
                 st.subheader("SEC RIA Compliance Report (with citations)")
@@ -442,11 +533,16 @@ with tabs[1]:
                 save_dashboard_data(dashboard_data)
 
 # 3. RegOS Chatbot Tab (LLM with document upload)
-with tabs[2]: # Changed index to 2
+with tabs[2]:
     st.header("RegOS Chatbot")
-    st.write(
-        "Ask regulatory, legal, or compliance questions about AIFs in India. "
-        "AI is grounded in the latest regulatory context, blends in the most recent SEBI circulars, and always provides citations."
+    st.markdown(
+        """
+        <div class="stMarkdown">
+        Ask regulatory, legal, or compliance questions about AIFs in India or SEC RIAs.
+        The AI is grounded in the latest regulatory context, blends in the most recent circulars, and always provides citations.
+        You can also upload documents for the chatbot to reference during your conversation.
+        </div>
+        """, unsafe_allow_html=True
     )
     if "chat_history" not in st.session_state:
         st.session_state["chat_history"] = []
@@ -459,27 +555,43 @@ with tabs[2]: # Changed index to 2
     )
     chat_doc_text = extract_uploaded_files_text(chat_uploaded_files) if chat_uploaded_files else None
 
-    latest_circulars = fetch_latest_circulars(limit=5, table_name="sebi_circulars")
-    circulars_context = make_circulars_context(latest_circulars)
-    if latest_circulars:
-        with st.expander("Latest SEBI Circulars & Regulatory Updates used for chatbot", expanded=False):
-            for c in latest_circulars:
-                st.markdown(f"**{c.get('title','')}**  \nDate: {c.get('pub_date','')}, Ref: {c.get('guid','')}")
-                st.markdown(f"Description: {c.get('description','')}")
-                if c.get("link"):
-                    st.markdown(f"[Full text]({c.get('link')})")
+    # Fetch both SEBI and SEC circulars for chatbot context
+    latest_sebi_circulars = fetch_latest_circulars(limit=3, table_name="sebi_circulars")
+    latest_sec_circulars = fetch_latest_circulars(limit=3, table_name="sec_circulars")
+    
+    combined_circulars_context = ""
+    if latest_sebi_circulars:
+        combined_circulars_context += make_circulars_context(latest_sebi_circulars, regulator="SEBI")
+    if latest_sec_circulars:
+        combined_circulars_context += make_circulars_context(latest_sec_circulars, regulator="SEC")
+
+    if combined_circulars_context:
+        with st.expander("Latest Regulatory Updates (SEBI & SEC) used for chatbot", expanded=False):
+            if latest_sebi_circulars:
                 st.markdown("---")
+                st.markdown("**SEBI Circulars:**")
+                for c in latest_sebi_circulars:
+                    st.markdown(f"- **{c.get('title','')}** ({c.get('pub_date','')}) [Link]({c.get('link','')})")
+            if latest_sec_circulars:
+                st.markdown("---")
+                st.markdown("**SEC Guidance:**")
+                for c in latest_sec_circulars:
+                    st.markdown(f"- **{c.get('title','')}** ({c.get('pub_date','')}) [Link]({c.get('link','')})")
+            st.markdown("---")
+    else:
+        st.info("No recent regulatory circulars or guidance found in the database. Chatbot will rely on general knowledge and real-time search.")
+
 
     # Show chat history as bubbles
     for entry in st.session_state["chat_history"]:
         if entry["role"] == "user":
             st.markdown(
-                f"<div style='background:linear-gradient(90deg,#00509e,#2d82b7 60%); color:#fff; border-radius:16px; padding:12px 18px; margin-top:10px; margin-bottom:2px; max-width:85%; align-self:flex-end; margin-left:auto;'><b>You:</b> {entry['content']}</div>",
+                f"<div class='chat-bubble-user'><b>You:</b> {entry['content']}</div>",
                 unsafe_allow_html=True,
             )
         else:
             st.markdown(
-                f"<div style='background-color:#e9f5fe; color:#013a63; border-radius:16px; padding:12px 18px; margin-top:2px; margin-bottom:10px; max-width:85%; align-self:flex-start; margin-right:auto;'><b>RegOS AI:</b> {entry['content']}</div>",
+                f"<div class='chat-bubble-ai'><b>RegOS AI:</b> {entry['content']}</div>",
                 unsafe_allow_html=True,
             )
 
@@ -493,28 +605,30 @@ with tabs[2]: # Changed index to 2
 
     if submitted and user_input.strip():
         user_query = (
-            f"{circulars_context}\n"
-            "You are a compliance expert. Answer strictly with reference to the latest Indian regulations and regulatory context. "
-            "Blend in recent SEBI circulars and official updates provided above. "
+            f"{combined_circulars_context}\n"
+            "You are a compliance expert for both Indian AIF and US SEC RIA regulations. "
+            "Answer strictly with reference to the latest regulations and regulatory context. "
+            "Blend in recent SEBI circulars and official SEC updates provided above. "
             "For every point, provide grounded citations from the current regulations, circulars, or law (include section number/date). "
             "Use real-time search to ensure all referenced regulations are current and provide links/citations where possible. "
             f"User query: {user_input}"
         )
-        st.session_state["chat_history"].append({"role": "user", "content": user_query, "time": datetime.now().isoformat()})
+        st.session_state["chat_history"].append({"role": "user", "content": user_input, "time": datetime.now().isoformat()}) # Store original user input
         with st.spinner("RegOS AI (compliance expert) is typing..."):
             response_text = ""
             response_placeholder = st.empty()
             try:
-                for chunk in gemini_chat(st.session_state["chat_history"], doc_text=chat_doc_text, circulars_context=circulars_context):
+                for chunk in gemini_chat(st.session_state["chat_history"], doc_text=chat_doc_text, circulars_context=combined_circulars_context):
                     response_text += chunk
                     response_placeholder.markdown(
-                        f"<div style='background-color:#e9f5fe; color:#013a63; border-radius:16px; padding:12px 18px; margin-top:2px; margin-bottom:10px; max-width:85%; align-self:flex-start; margin-right:auto;'><b>RegOS AI:</b> {response_text}</div>",
+                        f"<div class='chat-bubble-ai'><b>RegOS AI:</b> {response_text}</div>",
                         unsafe_allow_html=True,
                     )
             except Exception as e:
                 response_text = f"Sorry, there was an error with the AI: {e}"
                 response_placeholder.markdown(response_text)
-            st.session_state["chat_history"].append({"role": "model", "content": response_text, "time": datetime.now().isoformat()})
+            # Update the last entry in chat history with the full AI response
+            st.session_state["chat_history"][-1]["content"] = response_text
         dashboard_data["chat_turns"] += 1
         dashboard_data["chatbot_usage"].append({
             "prompt": user_input,
@@ -524,123 +638,31 @@ with tabs[2]: # Changed index to 2
         save_dashboard_data(dashboard_data)
         st.rerun()
 
-    if st.button("Clear Chat", key="clear_chat"):
-        st.session_state["chat_history"] = []
-        st.rerun()
-    if st.button("Download Chat History"):
-        chat_hist = "\n\n".join(
-            f"{e['role'].capitalize()} ({e['time'][:19]}): {e['content']}" for e in st.session_state["chat_history"]
-        )
-        st.markdown(downloadable_report(chat_hist, filename="RegOS-Chat-History.txt"), unsafe_allow_html=True)
-
-# 4. Dashboard & Insights Tab
-with tabs[3]: # Changed index to 3
-    st.header("Dashboard: Metrics, Trends & AI Insights")
-    st.write(
-        "Visualize compliance analysis results, AI performance metrics, chatbot usage, and key performance indicators. "
-        "Track trends, download results, and get advanced breakdowns."
-    )
-
-    num_analyses = len(dashboard_data["analyses"])
-    num_sec_ria_analyses = len(dashboard_data["sec_ria_analyses"]) # New metric
-    num_chats = dashboard_data["chat_turns"]
-
-    st.metric("AIF Documents Analyzed", num_analyses)
-    st.metric("SEC RIA Documents Analyzed", num_sec_ria_analyses) # New metric display
-    st.metric("Chatbot Interactions", num_chats)
-
-    uniq_files = set()
-    for a in dashboard_data["analyses"]:
-        for name in a["name"].split(","):
-            uniq_files.add(name.strip())
-    for a in dashboard_data["sec_ria_analyses"]: # Include SEC RIA files in unique count
-        for name in a["name"].split(","):
-            uniq_files.add(name.strip())
-    st.metric("Unique Files Uploaded (Total)", len(uniq_files))
-
-    if dashboard_data["analyses"]:
-        df_analyses = pd.DataFrame(dashboard_data["analyses"])
-        df_analyses["timestamp"] = pd.to_datetime(df_analyses["timestamp"])
-        fig = px.bar(
-            df_analyses,
-            x="timestamp",
-            y=df_analyses.index+1,
-            hover_data=["name"],
-            labels={"y":"Cumulative AIF Analyses", "timestamp":"Time"},
-            title="AIF Document Analysis Timeline",
-            color_discrete_sequence=["#00509e"],
-        )
-        st.plotly_chart(fig, width='stretch') # Changed use_container_width to width='stretch'
-
-    if dashboard_data["sec_ria_analyses"]:
-        df_sec_ria_analyses = pd.DataFrame(dashboard_data["sec_ria_analyses"])
-        df_sec_ria_analyses["timestamp"] = pd.to_datetime(df_sec_ria_analyses["timestamp"])
-        fig_sec_ria = px.bar(
-            df_sec_ria_analyses,
-            x="timestamp",
-            y=df_sec_ria_analyses.index+1,
-            hover_data=["name", "document_types"],
-            labels={"y":"Cumulative SEC RIA Analyses", "timestamp":"Time"},
-            title="SEC RIA Document Analysis Timeline",
-            color_discrete_sequence=["#28a745"], # Different color for distinction
-        )
-        st.plotly_chart(fig_sec_ria, width='stretch') # Changed use_container_width to width='stretch'
+    col_clear, col_download = st.columns([1, 1])
+    with col_clear:
+        if st.button("Clear Chat", key="clear_chat"):
+            st.session_state["chat_history"] = []
+            st.rerun()
+    with col_download:
+        if st.button("Download Chat History", key="download_chat"):
+            chat_hist = "\n\n".join(
+                f"{e['role'].capitalize()} ({e['time'][:19]}): {e['content']}" for e in st.session_state["chat_history"]
+            )
+            st.markdown(downloadable_report(chat_hist, filename="RegOS-Chat-History.txt"), unsafe_allow_html=True)
 
 
-    if dashboard_data["chatbot_usage"]:
-        df_chats = pd.DataFrame(dashboard_data["chatbot_usage"])
-        df_chats["timestamp"] = pd.to_datetime(df_chats["timestamp"])
-        chats_per_day = df_chats.groupby(df_chats["timestamp"].dt.date).size()
-        fig2 = px.line(
-            chats_per_day,
-            markers=True,
-            labels={"value":"# Interactions", "timestamp":"Date"},
-            title="Chatbot Usage Over Time",
-        )
-        st.plotly_chart(fig2, width='stretch') # Changed use_container_width to width='stretch'
-
-    st.subheader("Recent AIF Analyses")
-    for a in dashboard_data["analyses"][-3:][::-1]:
-        with st.expander(f"{a['name']} ({a['timestamp']})"):
-            st.write(a["report"])
-            st.markdown(downloadable_report(a["report"], filename=f"{a['name']}-AIF-Compliance-Report.txt"), unsafe_allow_html=True)
-
-    st.subheader("Recent SEC RIA Analyses") # New section for SEC RIA
-    for a in dashboard_data["sec_ria_analyses"][-3:][::-1]:
-        with st.expander(f"{a['name']} (Types: {', '.join(a['document_types']) if a['document_types'] else 'N/A'}) ({a['timestamp']})"):
-            st.write(a["report"])
-            st.markdown(downloadable_report(a["report"], filename=f"{a['name']}-SEC-RIA-Compliance-Report.txt"), unsafe_allow_html=True)
-
-    st.subheader("Recent Chatbot Usage")
-    for c in dashboard_data["chatbot_usage"][-3:][::-1]:
-        with st.expander(f"Prompt: {c['prompt'][:50]}... ({c['timestamp']})"):
-            st.markdown(f"**AI Response:** {c['response']}")
-
-    st.info("All data is stored in-memory for your session only. Download reports and chat logs for your records.")
-
-# 5. SEBI Circulars Table Tab
-with tabs[4]: # Changed index to 4
-    st.header("SEBI Circulars Table")
-    st.write("View the latest SEBI circulars and their details from the Supabase database.")
-    client = get_supabase_client()
-    circulars_data = client.table("sebi_circulars").select("*").order("pub_date", desc=True).limit(50).execute()
-    if hasattr(circulars_data, "data") and circulars_data.data:
-        df = pd.DataFrame(circulars_data.data)
-        # Only show the columns requested
-        display_cols = [c for c in CIRCULARS_COLUMNS if c in df.columns]
-        st.dataframe(df[display_cols], width='stretch') # Changed use_container_width to width='stretch'
-    else:
-        st.info("No circulars found in the database.")
-
-# 6. Portfolio Company Monitoring Tab
-with tabs[5]: # Changed index to 5
+# 4. Portfolio Company Monitoring Tab
+with tabs[3]:
     warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
     st.header("Portfolio Company Monitoring")
-    st.write(
+    st.markdown(
         """
+        <div class="stMarkdown">
         Monitor news, mentions, and details for your Alternative Investment Fund portfolio companies.
-        Search the entire web for news, events, or relevant updates. Enter company names below, and the tool will scan the web for recent mentions across news, blogs, and other sources.
-        """
+        Search the entire web for recent news, events, or relevant updates.
+        Enter company names below, and the tool will scan the web for mentions across news, blogs, and other sources.
+        </div>
+        """, unsafe_allow_html=True
     )
 
     # Set up the Google API keys and Custom Search Engine ID
@@ -678,9 +700,9 @@ with tabs[5]: # Changed index to 5
         return " ".join(filtered_tokens)
 
     # Search and scan button
-    if st.button("🔎 Scan News & Mentions for Portfolio Companies"):
+    if st.button("🔎 Scan News & Mentions for Portfolio Companies", key="scan_portfolio_companies"):
         if not company_names:
-            st.error("Please provide at least one company name.")
+            st.error("Please provide at least one company name to scan.")
         else:
             with st.spinner('Scanning web for company news and mentions...'):
                 service = build("customsearch", "v1", developerKey=GOOGLE_API_KEY)
@@ -694,7 +716,7 @@ with tabs[5]: # Changed index to 5
                 for company in company_names:
                     # Query for company, restrict to news and recent N days
                     search_query = f'"{company}"'
-                    date_restrict = f"y[{(datetime.now() - timedelta(days=date_filter_days)).strftime('%Y%m%d')}]"  # dateRestrict=y[20230601]
+                    date_restrict = f"y[{(datetime.now() - timedelta(days=date_filter_days)).strftime('%Y%m%d')}]"
                     try:
                         response = service.cse().list(
                             q=search_query,
@@ -702,8 +724,8 @@ with tabs[5]: # Changed index to 5
                             num=8,
                             sort=f"date",
                             dateRestrict=date_restrict,
-                            gl="in",  # India focus
-                            cr="countryIN"
+                            gl="us",  # General global focus, can be specified further
+                            cr="countryUS" # Can be adjusted based on company location
                         ).execute()
                         for result in response.get('items', []):
                             url = result['link']
@@ -745,20 +767,20 @@ with tabs[5]: # Changed index to 5
 
             # Display dashboard results
             if st.session_state.portfolio_matches:
-                st.success(f"News & mentions found for {len(st.session_state.portfolio_matches)} company-mentions!")
+                st.success(f"News & web mentions found for {len(st.session_state.portfolio_matches)} instances across your portfolio companies!")
                 df = pd.DataFrame(st.session_state.portfolio_matches)
-                st.dataframe(df, width='stretch') # Changed use_container_width to width='stretch'
+                st.dataframe(df, width='stretch')
 
                 # Show company-wise breakdown
-                st.subheader("Company-wise Mentions Count")
+                st.subheader("Mentions Count per Company")
                 mentions_per_company = df['Company'].value_counts()
                 fig = px.bar(
                     mentions_per_company,
-                    labels={"value":"# Mentions", "Company":"Company"},
+                    labels={"value":"# Mentions", "index":"Company"},
                     title="Mentions per Company",
                     color_discrete_sequence=["#5e35b1"]
                 )
-                st.plotly_chart(fig, width='stretch') # Changed use_container_width to width='stretch'
+                st.plotly_chart(fig, width='stretch')
 
                 # WordCloud of titles/snippets
                 st.subheader("Word Cloud of News Headlines & Snippets")
@@ -771,8 +793,8 @@ with tabs[5]: # Changed index to 5
                     st.pyplot(plt)
 
                 # Download option
-                def convert_df(df):
-                    return df.to_csv(index=False).encode('utf-8')
+                def convert_df(df_to_convert):
+                    return df_to_convert.to_csv(index=False).encode('utf-8')
                 st.download_button(
                     label="📥 Download Mentions as CSV",
                     data=convert_df(df),
@@ -782,7 +804,7 @@ with tabs[5]: # Changed index to 5
             else:
                 st.info("No news or web mentions found for your portfolio companies in the recent period.")
 
-    st.caption("Uses Google Custom Search, BeautifulSoup, TextBlob, wordcloud, and Matplotlib. Results subject to Google CSE and web content restrictions.")
+    st.caption("Powered by Google Custom Search, BeautifulSoup, TextBlob, wordcloud, and Matplotlib. Results subject to Google CSE and web content restrictions.")
 
 st.markdown("---")
 st.caption("Powered by Google Gemini, Streamlit, Supabase, and Plotly. Confidential & Secure. 💡")
