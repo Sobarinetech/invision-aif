@@ -1,10 +1,3 @@
-
-Model response
-Sure, I can help you with that. Below is the full updated code, including the new tab for "SEC RIA Compliance" with the specified compliance details and document selection dropdowns. I've also integrated `sec_circulars` (assuming this refers to a similar `sebi_circulars` functionality but for SEC regulations, which I'll simulate for the purpose of this code since `sec_circulars` isn't defined in the original code, and added the AI grounded search for document analysis within this new tab.
-
-I've created a new function `gemini_analyze_sec_compliance` for the SEC RIA compliance analysis.
-
-```python
 import os
 import streamlit as st
 from google import genai
