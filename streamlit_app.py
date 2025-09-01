@@ -26,10 +26,15 @@ import warnings
 
 # ---------- CONFIG ----------
 st.set_page_config(page_title="Invision AIF & RIA Solutions", layout="wide")
+
 st.markdown(
     """
     <style>
-    .reportview-container .main .block-container {
+    /* General container and app background */
+    .reportview-container {
+        background: #f0f2f6;
+    }
+    .main .block-container {
         padding-top: 2rem;
         padding-right: 2rem;
         padding-left: 2rem;
@@ -38,10 +43,63 @@ st.markdown(
     .stApp {
         background-color: #f0f2f6;
     }
-    .stTabs [data-baseweb="tab-list"] button [data-testid="stMarkdownContainer"] p {
-        font-size: 1.1rem;
+
+    /* Headings */
+    h1 {
+        color: #013a63;
+        text-align: center;
+        margin-bottom: 1.5rem;
+        font-size: 2.5rem;
+    }
+    h2 {
+        color: #013a63;
+        font-size: 1.8rem;
+        margin-top: 1.5rem;
+        margin-bottom: 1rem;
+    }
+    h3 {
+        color: #013a63;
+        font-size: 1.4rem;
+        margin-top: 1rem;
+        margin-bottom: 0.8rem;
+    }
+
+    /* Tabs Styling */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 2px; /* Reduced gap between tabs */
+    }
+    .stTabs [data-baseweb="tab-list"] button {
+        background-color: #e9f5fe; /* Light blue for inactive tabs */
+        border-radius: 8px 8px 0 0;
+        padding: 10px 15px;
+        color: #013a63;
+        font-weight: normal;
+        border: 1px solid #00509e;
+        border-bottom: none; /* No bottom border for inactive tabs */
+        margin-right: 5px; /* Space between tabs */
+        transition: all 0.2s ease-in-out;
+    }
+    .stTabs [data-baseweb="tab-list"] button:hover {
+        background-color: #d1ecf1; /* Lighter hover */
+        color: #003f7f;
+    }
+    .stTabs [data-baseweb="tab-list"] button[aria-selected="true"] {
+        background-color: #00509e; /* Darker blue for active tab */
+        color: white;
+        border: 1px solid #00509e;
+        border-bottom: none;
         font-weight: bold;
     }
+    /* Content area below tabs */
+    .stTabs [data-baseweb="tab-panel"] {
+        background-color: white;
+        padding: 20px;
+        border-radius: 0 8px 8px 8px;
+        border: 1px solid #00509e;
+        margin-top: -1px; /* Overlap with tab border */
+    }
+
+    /* Buttons */
     .stButton>button {
         background-color: #00509e;
         color: white;
@@ -51,57 +109,101 @@ st.markdown(
         border: none;
         cursor: pointer;
         transition: background-color 0.3s;
+        box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
     }
     .stButton>button:hover {
         background-color: #003f7f;
+        box-shadow: 2px 2px 8px rgba(0,0,0,0.2);
     }
-    .stTextArea, .stTextInput, .stFileUploader {
+
+    /* Text Inputs, Text Areas, File Uploader */
+    .stTextArea textarea, .stTextInput input[type="text"] {
         border-radius: 8px;
         border: 1px solid #ced4da;
+        padding: 10px;
+        box-shadow: inset 1px 1px 3px rgba(0,0,0,0.05);
     }
-    .stAlert {
+    div[data-testid="stFileUploader"] {
+        border: 1px dashed #00509e;
         border-radius: 8px;
-    }
-    h1 {
-        color: #013a63;
-        text-align: center;
-        margin-bottom: 1.5rem;
-    }
-    h2, h3 {
-        color: #013a63;
-    }
-    .css-1d391kg e16z0gm2 label { /* This targets the label of the multiselect */
-        font-weight: bold;
-        color: #013a63;
-    }
-    .stMarkdown div[data-testid="stMarkdownContainer"] {
+        padding: 20px;
         background-color: #e9f5fe;
-        border-left: 5px solid #00509e;
+        text-align: center;
+    }
+
+    /* Expander */
+    .streamlit-expanderHeader {
+        background-color: #f8f9fa; /* Light grey for expander header */
+        border-radius: 8px;
+        border: 1px solid #dee2e6;
+        padding: 10px;
+        margin-bottom: 5px;
+    }
+    .streamlit-expanderContent {
+        background-color: #ffffff;
+        border: 1px solid #dee2e6;
+        border-top: none;
+        border-radius: 0 0 8px 8px;
+        padding: 10px;
+    }
+
+    /* Custom Markdown containers for descriptions and chat */
+    .stMarkdown div[data-testid="stMarkdownContainer"] {
+        background-color: #f8f9fa; /* Very light grey for info boxes */
+        border-left: 4px solid #00509e;
         padding: 15px;
         border-radius: 8px;
         margin-bottom: 1rem;
+        line-height: 1.6;
     }
+
+    /* Chat bubbles */
     .chat-bubble-user {
-        background: linear-gradient(90deg, #00509e, #2d82b7 60%);
+        background: linear-gradient(90deg, #00509e, #2d82b7 80%);
         color: #fff;
-        border-radius: 16px;
+        border-radius: 18px 18px 2px 18px; /* Rounded corners, sharp bottom-left */
         padding: 12px 18px;
         margin-top: 10px;
-        margin-bottom: 2px;
-        max-width: 85%;
-        align-self: flex-end;
+        margin-bottom: 8px;
+        max-width: 75%;
         margin-left: auto;
+        word-wrap: break-word;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
     }
     .chat-bubble-ai {
         background-color: #e9f5fe;
         color: #013a63;
-        border-radius: 16px;
+        border-radius: 18px 18px 18px 2px; /* Rounded corners, sharp bottom-right */
         padding: 12px 18px;
-        margin-top: 2px;
+        margin-top: 8px;
         margin-bottom: 10px;
-        max-width: 85%;
-        align-self: flex-start;
+        max-width: 75%;
         margin-right: auto;
+        word-wrap: break-word;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.08);
+    }
+
+    /* Links in markdown */
+    a {
+        color: #00509e;
+        text-decoration: none;
+    }
+    a:hover {
+        text-decoration: underline;
+    }
+
+    /* Footer */
+    .st-emotion-cache-nahz7x { /* Targeting the footer specifically */
+        text-align: center;
+        color: #6c757d;
+        font-size: 0.85rem;
+        margin-top: 3rem;
+    }
+
+    /* Streamlit widgets like multiselect labels */
+    .st-au { /* label for multiselect */
+        font-weight: bold;
+        color: #013a63;
     }
     </style>
     """,
@@ -114,7 +216,7 @@ st.markdown(
 )
 st.markdown(
     """
-    <div style='font-size:1.08rem;color:#222;background:#e9f5fe;border-radius:12px;padding:10px 18px;margin-bottom:1.5rem;'>
+    <div style='font-size:1.08rem;color:#222;background:#e9f5fe;border-radius:12px;padding:10px 18px;margin-bottom:2rem;text-align:center;'>
     🔍 <b>Analyze, chat, and monitor with next-gen compliance AI for Alternative Investment Funds and Registered Investment Advisers.<br>
     <span style='color:#013a63;'>Upload documents, ask questions, and track insights with an advanced platform. Latest circulars and rules are always considered in the analysis.</span></b>
     </div>
@@ -126,6 +228,7 @@ st.markdown(
 SUPABASE_URL = st.secrets.get("SUPABASE_URL")
 SUPABASE_KEY = st.secrets.get("SUPABASE_KEY")
 
+# NOTE: CIRCULARS_COLUMNS is kept for type hinting if needed elsewhere, though SEBI Circulars tab is removed.
 CIRCULARS_COLUMNS = [
     "id", "guid", "title", "link", "description", "pub_date", "pdf_url", "type", "ai_analysis", "analysis_status",
     "created_at", "updated_at", "applicable_entities", "entity_keywords", "regulatory_scope", "extracted_content",
@@ -137,15 +240,20 @@ def get_supabase_client() -> Client:
 
 def fetch_latest_circulars(limit=5, table_name="sebi_circulars"):
     client = get_supabase_client()
-    data = (
-        client.table(table_name)
-        .select("*")
-        .order("pub_date", desc=True)
-        .limit(limit)
-        .execute()
-    )
-    if hasattr(data, "data"):
-        return data.data
+    # Attempt to fetch from the specified table. Handle table not found gracefully.
+    try:
+        data = (
+            client.table(table_name)
+            .select("*")
+            .order("pub_date", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        if hasattr(data, "data"):
+            return data.data
+    except Exception as e:
+        # st.warning(f"Could not fetch circulars from table '{table_name}': {e}") # Suppress this in final UI
+        pass # Silently fail if table doesn't exist, e.g., 'sec_circulars' not yet populated
     return []
 
 def make_circulars_context(circulars, regulator="SEBI"):
@@ -237,6 +345,7 @@ def gemini_chat(history, doc_text=None, circulars_context=None):
             part = chunk.candidates[0].content.parts[0]
             if part.text:
                 yield part.text
+    return output
 
 # Edge Function for SEC RIA Compliance Analysis
 def gemini_analyze_sec_compliance(doc_text, sec_circulars_context):
@@ -390,13 +499,11 @@ with tabs[0]:
     st.header("AIF Document Compliance Analysis")
     st.markdown(
         """
-        <div class="stMarkdown">
         Upload your Alternative Investment Fund (AIF) related documents for direct compliance AI analysis.
         The AI will extract, analyze, and summarize compliance, risks, breaches, and provide recommendations,
         referencing the latest SEBI regulations and providing grounded citations.
         Recent SEBI circulars and regulatory updates are automatically blended into the analysis.
-        </div>
-        """, unsafe_allow_html=True
+        """
     )
     uploaded_files = st.file_uploader(
         "Upload AIF document(s) (PDF, DOCX, TXT)",
@@ -415,6 +522,9 @@ with tabs[0]:
                 if c.get("link"):
                     st.markdown(f"[Full text]({c.get('link')})")
                 st.markdown("---")
+    else:
+        st.info("No recent SEBI circulars or guidance found in the database. Analysis will rely on general SEBI AIF knowledge and real-time search.")
+
 
     if uploaded_files:
         doc_text = extract_uploaded_files_text(uploaded_files)
@@ -456,12 +566,10 @@ with tabs[1]:
     st.header("SEC RIA Compliance Analysis")
     st.markdown(
         """
-        <div class="stMarkdown">
         Upload your documents for direct SEC Registered Investment Adviser (RIA) compliance AI analysis.
         The AI will analyze and summarize compliance, risks, and potential breaches against core SEC RIA obligations,
         referencing the latest SEC regulations and providing grounded citations.
-        </div>
-        """, unsafe_allow_html=True
+        """
     )
 
     sec_uploaded_files = st.file_uploader(
@@ -489,11 +597,9 @@ with tabs[1]:
     st.subheader("Core SEC Compliance Obligations & Document Selection")
     st.markdown(
         """
-        <div class="stMarkdown">
         To help the AI focus its analysis, please select the type(s) of documents you are uploading
         relative to the core SEC RIA compliance obligations.
-        </div>
-        """, unsafe_allow_html=True
+        """
     )
 
     sec_document_types = st.multiselect(
@@ -537,12 +643,10 @@ with tabs[2]:
     st.header("RegOS Chatbot")
     st.markdown(
         """
-        <div class="stMarkdown">
         Ask regulatory, legal, or compliance questions about AIFs in India or SEC RIAs.
         The AI is grounded in the latest regulatory context, blends in the most recent circulars, and always provides citations.
         You can also upload documents for the chatbot to reference during your conversation.
-        </div>
-        """, unsafe_allow_html=True
+        """
     )
     if "chat_history" not in st.session_state:
         st.session_state["chat_history"] = []
@@ -628,7 +732,7 @@ with tabs[2]:
                 response_text = f"Sorry, there was an error with the AI: {e}"
                 response_placeholder.markdown(response_text)
             # Update the last entry in chat history with the full AI response
-            st.session_state["chat_history"][-1]["content"] = response_text
+            st.session_state["chat_history"].append({"role": "model", "content": response_text, "time": datetime.now().isoformat()})
         dashboard_data["chat_turns"] += 1
         dashboard_data["chatbot_usage"].append({
             "prompt": user_input,
@@ -657,12 +761,10 @@ with tabs[3]:
     st.header("Portfolio Company Monitoring")
     st.markdown(
         """
-        <div class="stMarkdown">
         Monitor news, mentions, and details for your Alternative Investment Fund portfolio companies.
         Search the entire web for recent news, events, or relevant updates.
         Enter company names below, and the tool will scan the web for mentions across news, blogs, and other sources.
-        </div>
-        """, unsafe_allow_html=True
+        """
     )
 
     # Set up the Google API keys and Custom Search Engine ID
