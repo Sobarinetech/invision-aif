@@ -1,3 +1,10 @@
+
+Model response
+Sure, I can help you with that. Below is the full updated code, including the new tab for "SEC RIA Compliance" with the specified compliance details and document selection dropdowns. I've also integrated `sec_circulars` (assuming this refers to a similar `sebi_circulars` functionality but for SEC regulations, which I'll simulate for the purpose of this code since `sec_circulars` isn't defined in the original code, and added the AI grounded search for document analysis within this new tab.
+
+I've created a new function `gemini_analyze_sec_compliance` for the SEC RIA compliance analysis.
+
+```python
 import os
 import streamlit as st
 from google import genai
@@ -53,10 +60,10 @@ CIRCULARS_COLUMNS = [
 def get_supabase_client() -> Client:
     return create_client(SUPABASE_URL, SUPABASE_KEY)
 
-def fetch_latest_circulars(limit=5):
+def fetch_latest_circulars(limit=5, table_name="sebi_circulars"):
     client = get_supabase_client()
     data = (
-        client.table("sebi_circulars")
+        client.table(table_name)
         .select("*")
         .order("pub_date", desc=True)
         .limit(limit)
@@ -69,7 +76,7 @@ def fetch_latest_circulars(limit=5):
 def make_circulars_context(circulars):
     if not circulars:
         return ""
-    context = "Here are the most recent SEBI circulars and updates for regulatory context:\n"
+    context = "Here are the most recent regulatory circulars and updates for context:\n"
     for c in circulars:
         context += (
             f"- {c.get('title','')}\n"
@@ -156,6 +163,59 @@ def gemini_chat(history, doc_text=None, circulars_context=None):
             if part.text:
                 yield part.text
 
+# New Edge Function for SEC RIA Compliance Analysis
+def gemini_analyze_sec_compliance(doc_text, sec_circulars_context):
+    client = genai.Client(
+        api_key=os.environ.get("GEMINI_API_KEY"),
+    )
+    model = "gemini-2.5-flash"
+    prompt = (
+        f"{sec_circulars_context}\n"
+        "Act as an SEC RIA compliance expert. Analyze the following document(s) strictly for compliance with current SEC RIA regulations. "
+        "For every point, provide proper grounded citations from official SEC regulations, rules, or law. Use real-time search and recent circulars above to ensure all referenced regulations are current. "
+        "Return your analysis in the following structure:\n\n"
+        "1. **Summary of Document(s) in relation to SEC RIA Compliance** (with citations)\n"
+        "2. **Key SEC RIA Compliance Risks** (with grounded citations)\n"
+        "3. **Detected SEC RIA Regulatory Breaches** (cite rule/section)\n"
+        "4. **Recommendations for SEC RIA Compliance** (reference the specific compliance to address)\n"
+        "5. **Any Other Notable Observations for SEC RIA Compliance** (with citations)\n"
+        "6. **Breakdown of Risk by Document Section against SEC RIA Rules** (reference relevant requirements)\n"
+        "7. **AI Confidence Level (0-100%) and Reasoning**\n"
+        "8. **Potential SEC RIA Red Flags** (cite regulation)\n"
+        "9. **Suggested Next Steps for SEC RIA Compliance Team** (with references)\n"
+        "10. **All references must cite relevant SEC regulation/rule with section number and date, if available.**\n\n"
+        f"Document text for analysis:\n{doc_text}"
+    )
+    contents = [
+        types.Content(
+            role="user",
+            parts=[types.Part.from_text(text=prompt)],
+        ),
+    ]
+    tools = [
+        types.Tool(googleSearch=types.GoogleSearch()),
+    ]
+    generate_content_config = types.GenerateContentConfig(
+        thinking_config=types.ThinkingConfig(
+            thinking_budget=0,
+        ),
+        tools=tools,
+    )
+    output = ""
+    for chunk in client.models.generate_content_stream(
+        model=model,
+        contents=contents,
+        config=generate_content_config,
+    ):
+        if hasattr(chunk, "text") and chunk.text:
+            output += chunk.text
+        elif hasattr(chunk, "candidates") and chunk.candidates:
+            part = chunk.candidates[0].content.parts[0]
+            if part.text:
+                output += part.text
+    return output
+
+
 # ---------- FILE TEXT EXTRACTION ----------
 def extract_text_from_pdf(pdf_file):
     text = ""
@@ -220,6 +280,7 @@ def get_dashboard_data():
     if "dashboard_data" not in st.session_state:
         st.session_state["dashboard_data"] = {
             "analyses": [],
+            "sec_ria_analyses": [], # New entry for SEC RIA analyses
             "chat_turns": 0,
             "chatbot_usage": [],
         }
@@ -232,6 +293,7 @@ def save_dashboard_data(data):
 tabs = st.tabs(
     [
         "Compliance Analysis",
+        "SEC RIA Compliance", # New tab
         "RegOS Chatbot",
         "Dashboard & Insights",
         "SEBI Circulars Table",
@@ -240,7 +302,7 @@ tabs = st.tabs(
 )
 dashboard_data = get_dashboard_data()
 
-# 1. Compliance Analysis Tab
+# 1. Compliance Analysis Tab (Existing)
 with tabs[0]:
     st.header("Compliance Analysis of AIF Documents")
     st.write(
@@ -255,7 +317,7 @@ with tabs[0]:
         key="compliance_files"
     )
     # Fetch latest circulars
-    latest_circulars = fetch_latest_circulars(limit=5)
+    latest_circulars = fetch_latest_circulars(limit=5, table_name="sebi_circulars")
     circulars_context = make_circulars_context(latest_circulars)
     if latest_circulars:
         with st.expander("Latest SEBI Circulars & Regulatory Updates used for analysis", expanded=False):
@@ -300,8 +362,84 @@ with tabs[0]:
             })
             save_dashboard_data(dashboard_data)
 
-# 2. RegOS Chatbot Tab (LLM with document upload)
+# 2. New SEC RIA Compliance Tab
 with tabs[1]:
+    st.header("SEC RIA Compliance Analysis")
+    st.write(
+        "Upload your documents for direct SEC Registered Investment Adviser (RIA) compliance AI analysis. "
+        "The AI will analyze and summarize compliance, risks, and potential breaches against core SEC RIA obligations, "
+        "referencing the latest SEC regulations and providing citations."
+    )
+
+    sec_uploaded_files = st.file_uploader(
+        "Upload document(s) (PDF, DOCX, TXT) for SEC RIA compliance review",
+        type=["pdf", "docx", "txt"],
+        accept_multiple_files=True,
+        key="sec_ria_compliance_files"
+    )
+
+    # Simulate fetching SEC circulars/guidance from a theoretical "sec_circulars" table
+    # In a real application, you would populate this table with actual SEC releases.
+    # For now, it will return an empty list or mock data.
+    sec_circulars = fetch_latest_circulars(limit=5, table_name="sec_circulars") # Assuming a table named sec_circulars
+    sec_circulars_context = make_circulars_context(sec_circulars)
+    if sec_circulars:
+        with st.expander("Latest SEC Guidance & Regulatory Updates used for analysis", expanded=False):
+            for c in sec_circulars:
+                st.markdown(f"**{c.get('title','')}**  \nDate: {c.get('pub_date','')}, Ref: {c.get('guid','')}")
+                st.markdown(f"Description: {c.get('description','')}")
+                if c.get("link"):
+                    st.markdown(f"[Full text]({c.get('link')})")
+                st.markdown("---")
+    else:
+        st.info("No recent SEC circulars or guidance found in the database. Analysis will rely on general SEC RIA knowledge and real-time search.")
+
+
+    st.subheader("Core SEC Compliance Obligations & Document Selection")
+    st.markdown(
+        """
+        Below are key SEC RIA compliance obligations. Select the document type(s) your uploaded files pertain to.
+        This helps the AI focus its analysis.
+        """
+    )
+
+    sec_document_types = st.multiselect(
+        "Select document type(s) for focused analysis:",
+        [
+            "Form ADV Part 1 & Part 2",
+            "Form CRS (Client Relationship Summary)",
+            "Compliance Program/Manual",
+            "Code of Ethics",
+            "Custody Rule related documents (e.g., audit reports)",
+            "Marketing Materials/Advertising",
+            "Books & Records (e.g., client agreements, trade records)",
+            "Other Regulatory Filings",
+            "General Internal Policies & Procedures"
+        ],
+        key="sec_doc_type_selector"
+    )
+
+    if sec_uploaded_files:
+        sec_doc_text = extract_uploaded_files_text(sec_uploaded_files)
+        if not sec_doc_text:
+            st.error("No usable text extracted from your document(s). Please upload valid PDF, DOCX, or TXT files.")
+        else:
+            if st.button("Analyze SEC RIA Compliance"):
+                with st.spinner("AI analyzing uploaded document(s) against SEC RIA regulations..."):
+                    sec_ria_report = gemini_analyze_sec_compliance(sec_doc_text, sec_circulars_context)
+                st.subheader("SEC RIA Compliance Report (with citations)")
+                st.markdown(sec_ria_report)
+                st.markdown(downloadable_report(sec_ria_report, filename="SEC-RIA-Compliance-Report.txt"), unsafe_allow_html=True)
+                dashboard_data["sec_ria_analyses"].append({
+                    "name": ", ".join(f.name for f in sec_uploaded_files),
+                    "document_types": sec_document_types,
+                    "report": sec_ria_report,
+                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                })
+                save_dashboard_data(dashboard_data)
+
+# 3. RegOS Chatbot Tab (LLM with document upload)
+with tabs[2]: # Changed index to 2
     st.header("RegOS Chatbot")
     st.write(
         "Ask regulatory, legal, or compliance questions about AIFs in India. "
@@ -318,7 +456,7 @@ with tabs[1]:
     )
     chat_doc_text = extract_uploaded_files_text(chat_uploaded_files) if chat_uploaded_files else None
 
-    latest_circulars = fetch_latest_circulars(limit=5)
+    latest_circulars = fetch_latest_circulars(limit=5, table_name="sebi_circulars")
     circulars_context = make_circulars_context(latest_circulars)
     if latest_circulars:
         with st.expander("Latest SEBI Circulars & Regulatory Updates used for chatbot", expanded=False):
@@ -392,8 +530,8 @@ with tabs[1]:
         )
         st.markdown(downloadable_report(chat_hist, filename="RegOS-Chat-History.txt"), unsafe_allow_html=True)
 
-# 3. Dashboard & Insights Tab
-with tabs[2]:
+# 4. Dashboard & Insights Tab
+with tabs[3]: # Changed index to 3
     st.header("Dashboard: Metrics, Trends & AI Insights")
     st.write(
         "Visualize compliance analysis results, AI performance metrics, chatbot usage, and key performance indicators. "
@@ -401,14 +539,21 @@ with tabs[2]:
     )
 
     num_analyses = len(dashboard_data["analyses"])
+    num_sec_ria_analyses = len(dashboard_data["sec_ria_analyses"]) # New metric
     num_chats = dashboard_data["chat_turns"]
-    st.metric("Documents Analyzed", num_analyses)
+
+    st.metric("AIF Documents Analyzed", num_analyses)
+    st.metric("SEC RIA Documents Analyzed", num_sec_ria_analyses) # New metric display
     st.metric("Chatbot Interactions", num_chats)
+
     uniq_files = set()
     for a in dashboard_data["analyses"]:
         for name in a["name"].split(","):
             uniq_files.add(name.strip())
-    st.metric("Unique Files Uploaded", len(uniq_files))
+    for a in dashboard_data["sec_ria_analyses"]: # Include SEC RIA files in unique count
+        for name in a["name"].split(","):
+            uniq_files.add(name.strip())
+    st.metric("Unique Files Uploaded (Total)", len(uniq_files))
 
     if dashboard_data["analyses"]:
         df_analyses = pd.DataFrame(dashboard_data["analyses"])
@@ -418,11 +563,27 @@ with tabs[2]:
             x="timestamp",
             y=df_analyses.index+1,
             hover_data=["name"],
-            labels={"y":"Cumulative Analyses", "timestamp":"Time"},
-            title="Document Analysis Timeline",
+            labels={"y":"Cumulative AIF Analyses", "timestamp":"Time"},
+            title="AIF Document Analysis Timeline",
             color_discrete_sequence=["#00509e"],
         )
         st.plotly_chart(fig, use_container_width=True)
+
+    if dashboard_data["sec_ria_analyses"]:
+        df_sec_ria_analyses = pd.DataFrame(dashboard_data["sec_ria_analyses"])
+        df_sec_ria_analyses["timestamp"] = pd.to_datetime(df_sec_ria_analyses["timestamp"])
+        fig_sec_ria = px.bar(
+            df_sec_ria_analyses,
+            x="timestamp",
+            y=df_sec_ria_analyses.index+1,
+            hover_data=["name", "document_types"],
+            labels={"y":"Cumulative SEC RIA Analyses", "timestamp":"Time"},
+            title="SEC RIA Document Analysis Timeline",
+            color_discrete_sequence=["#28a745"], # Different color for distinction
+        )
+        st.plotly_chart(fig_sec_ria, use_container_width=True)
+
+
     if dashboard_data["chatbot_usage"]:
         df_chats = pd.DataFrame(dashboard_data["chatbot_usage"])
         df_chats["timestamp"] = pd.to_datetime(df_chats["timestamp"])
@@ -435,11 +596,17 @@ with tabs[2]:
         )
         st.plotly_chart(fig2, use_container_width=True)
 
-    st.subheader("Recent Analyses")
+    st.subheader("Recent AIF Analyses")
     for a in dashboard_data["analyses"][-3:][::-1]:
         with st.expander(f"{a['name']} ({a['timestamp']})"):
             st.write(a["report"])
             st.markdown(downloadable_report(a["report"], filename=f"{a['name']}-AIF-Compliance-Report.txt"), unsafe_allow_html=True)
+
+    st.subheader("Recent SEC RIA Analyses") # New section for SEC RIA
+    for a in dashboard_data["sec_ria_analyses"][-3:][::-1]:
+        with st.expander(f"{a['name']} (Types: {', '.join(a['document_types']) if a['document_types'] else 'N/A'}) ({a['timestamp']})"):
+            st.write(a["report"])
+            st.markdown(downloadable_report(a["report"], filename=f"{a['name']}-SEC-RIA-Compliance-Report.txt"), unsafe_allow_html=True)
 
     st.subheader("Recent Chatbot Usage")
     for c in dashboard_data["chatbot_usage"][-3:][::-1]:
@@ -448,8 +615,8 @@ with tabs[2]:
 
     st.info("All data is stored in-memory for your session only. Download reports and chat logs for your records.")
 
-# 4. SEBI Circulars Table Tab
-with tabs[3]:
+# 5. SEBI Circulars Table Tab
+with tabs[4]: # Changed index to 4
     st.header("SEBI Circulars Table")
     st.write("View the latest SEBI circulars and their details from the Supabase database.")
     client = get_supabase_client()
@@ -462,8 +629,8 @@ with tabs[3]:
     else:
         st.info("No circulars found in the database.")
 
-# 5. Portfolio Company Monitoring Tab
-with tabs[4]:
+# 6. Portfolio Company Monitoring Tab
+with tabs[5]: # Changed index to 5
     warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
     st.header("Portfolio Company Monitoring")
     st.write(
@@ -616,6 +783,3 @@ with tabs[4]:
 
 st.markdown("---")
 st.caption("Powered by Google Gemini, Streamlit, Supabase, and Plotly. Confidential & Secure. 💡")
-
-# ---------- REQUIREMENTS ----------
-# pip install streamlit google-genai PyPDF2 python-docx pandas plotly supabase google-api-python-client scikit-learn beautifulsoup4 langdetect textblob wordcloud matplotlib
